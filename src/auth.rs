@@ -114,7 +114,7 @@ fn register_credentials(credentials: &LoginData, device_id: String) -> Result<()
 }
 
 #[tokio::main]
-pub async fn auth() -> Result<(), reqwest::Error> {
+pub async fn login() -> Result<()> {
     let device_id = Uuid::new_v4().to_string();
     let client = ApiClient::new(&device_id);
 

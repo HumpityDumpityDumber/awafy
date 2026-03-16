@@ -1,7 +1,8 @@
+use anyhow::Result;
 use clap::{Parser, Subcommand};
-use reqwest::Error;
 
 mod auth;
+mod daemon;
 mod models;
 
 #[derive(Parser)]
@@ -14,15 +15,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Auth,
+    Login,
     Daemon,
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Auth {} => auth::auth(),
-        Commands::Daemon {} => todo!(),
+        Commands::Login {} => auth::login(),
+        Commands::Daemon {} => daemon::main(),
     }
 }
