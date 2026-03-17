@@ -144,3 +144,17 @@ pub struct RefreshToken {
 pub struct Code {
     pub code: String,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Credentials {
+    pub access_token: String,
+    pub token_expiry: i64,
+    pub refresh_token: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UserInfo {
+    pub id: String,
+    pub name: String,
+    pub device_id: String,
+}

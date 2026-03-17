@@ -1,13 +1,13 @@
-use crate::models::{Code, LoginData};
+use crate::constants::JSON_TYPE;
+use crate::models::{Code, Credentials, LoginData, UserInfo};
 use anyhow::Result;
+use directories::ProjectDirs;
 use keyring::Entry;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
+use std::{fs, path::PathBuf};
 use tokio::time::{Duration, sleep};
 use uuid::Uuid;
-
-const JSON_TYPE: &str = "application/json";
 
 pub struct ApiClient {
     client: Client,
@@ -74,42 +74,35 @@ impl ApiClient {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct RefreshCred {
-    refresh_token: String,
-    username: String,
-    user_id: String,
-    device_id: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct AccessCred {
-    access_token: String,
-    token_expiry: i64,
-}
-
-fn register_credentials(credentials: &LoginData, device_id: String) -> Result<()> {
+fn register_credentials(login_data: &LoginData, device_id: String) -> Result<()> {
     const SERVICE: &str = "AWAfy";
 
-    let refresh_cred = RefreshCred {
-        refresh_token: credentials.auth_data.refresh.refresh_token.clone(),
-        username: credentials.name.clone(),
-        user_id: credentials.id.clone(),
-        device_id,
+    let credentials = Credentials {
+        access_token: login_data.auth_data.refresh.access_token.clone(),
+        token_expiry: login_data.auth_data.refresh.expires_at.clone(),
+        refresh_token: login_data.auth_data.refresh.refresh_token.clone(),
     };
 
-    let refresh_entry = Entry::new(SERVICE, &format!("{}:refresh_token", credentials.name))?;
-    let refresh_json = serde_json::to_string(&refresh_cred)?;
+    let refresh_entry = Entry::new(SERVICE, &login_data.id)?;
+    let refresh_json = serde_json::to_string(&credentials)?;
     refresh_entry.set_password(&refresh_json)?;
 
-    let access_cred = AccessCred {
-        access_token: credentials.auth_data.refresh.access_token.clone(),
-        token_expiry: credentials.auth_data.refresh.expires_at.clone(),
+    // TODO: also need to save user info file w/ id, name, pfp link
+    if let Some(proj_dirs) = ProjectDirs::from("ink", "raurutuchr", "AWAfy") {
+        fs::create_dir_all(proj_dirs.config_dir()).unwrap();
+        let mut config = PathBuf::from(proj_dirs.config_dir());
+        config.push("user.json");
+        fs::write(config, "thing").unwrap();
+    } else {
+        panic!()
+    }
+
+    let user_info = UserInfo {
+        id: login_data.id.clone(),
+        name: login_data.name.clone(),
+        device_id: device_id,
     };
 
-    let access_entry = Entry::new(SERVICE, &format!("{}:access_token", credentials.name))?;
-    let access_json = serde_json::to_string(&access_cred)?;
-    access_entry.set_password(&access_json)?;
     Ok(())
 }
 

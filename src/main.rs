@@ -4,6 +4,11 @@ use clap::{Parser, Subcommand};
 mod auth;
 mod daemon;
 mod models;
+mod utils;
+
+mod constants {
+    pub const JSON_TYPE: &str = "application/json";
+}
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
