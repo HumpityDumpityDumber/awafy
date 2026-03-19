@@ -1,14 +1,15 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-mod auth;
-mod daemon;
-mod models;
-mod utils;
+mod commands;
 
-mod constants {
-    pub const JSON_TYPE: &str = "application/json";
-}
+#[allow(dead_code)]
+mod models;
+
+mod auth;
+mod constants;
+mod https;
+mod rooms;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -24,11 +25,12 @@ enum Commands {
     Daemon,
 }
 
-fn main() -> Result<(), anyhow::Error> {
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Login {} => auth::login(),
-        Commands::Daemon {} => daemon::main(),
+        Commands::Login {} => commands::login::login().await,
+        Commands::Daemon {} => commands::daemon::main().await,
     }
 }
