@@ -4,9 +4,9 @@ use crate::models::{Session, UserInfo};
 use anyhow::{Context, Error, Result};
 use directories::ProjectDirs;
 use keyring::Entry;
-use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
+use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
 use tokio::time::{Duration, sleep};
@@ -90,13 +90,9 @@ pub fn register_credentials(login_data: &Value, device_id: &str) -> Result<()> {
 }
 
 pub async fn refresh_session(session: &mut Session, client: &Client) -> Result<(), Error> {
-    HeaderMap::new().insert(
-        "X-Access-Token",
-        HeaderValue::from_str(&session.access_token)?,
-    );
     let login_data: Value = client
         .post("https://api.awa.io/v5/authorize")
-        .body(session.refresh_token.to_string())
+        .body(json!({"refreshToken": session.refresh_token}).to_string())
         .send()
         .await?
         .json()

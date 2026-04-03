@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::{Arc, RwLock};
+use std::sync::Mutex;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Code {
@@ -42,10 +42,10 @@ pub struct UserInfo {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Song {
-    name: String,
-    id: String,
-    album: String,
-    album_art: String,
+    pub name: String,
+    pub id: String,
+    pub album: String,
+    pub album_art: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -57,14 +57,14 @@ pub struct Lounge {
     #[serde(rename = "mediaQueueId")]
     pub queue_id: String,
     #[serde(skip)]
-    queue: Option<Arc<RwLock<Queue>>>,
+    queue: Option<Mutex<Queue>>,
 }
 
 impl Lounge {
     pub fn update_queue(&mut self, queue: Queue) -> () {
-        self.queue = Some(Arc::new(RwLock::new(queue)));
+        self.queue = Some(Mutex::new(queue));
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Queue(Vec<Song>);
+pub struct Queue(pub Vec<Song>);
