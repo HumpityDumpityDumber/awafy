@@ -7,9 +7,7 @@ mod commands;
 mod models;
 
 mod auth;
-mod constants;
 mod https;
-mod rooms;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
