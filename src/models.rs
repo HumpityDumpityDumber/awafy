@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Mutex;
+use std::time::Duration;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Code {
@@ -34,11 +35,11 @@ impl Session {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct UserInfo {
-    pub id: String,
-    pub name: String,
-}
+// #[derive(Serialize, Deserialize, Debug)]
+// pub struct UserInfo {
+//     pub id: String,
+//     pub name: String,
+// }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Song {
@@ -68,3 +69,9 @@ impl Lounge {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Queue(pub Vec<Song>);
+
+pub struct PlayerState {
+    playing: bool,
+    position: Duration,
+    song: Song,
+}

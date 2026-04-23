@@ -1,5 +1,5 @@
 use crate::models::{Code, Lounge, Queue, Session, Song};
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
@@ -75,7 +75,7 @@ impl ApiClient {
         }
     }
 
-    pub async fn refresh_session(&self, session: &mut Session) -> Result<Value> {
+    pub async fn refresh_session(&self, session: &mut Session) -> Result<(), Error> {
         let login_data: Value = self
             .request(Method::POST, "/v5/authorize", None)
             .json(&json!({ "refreshToken": session.refresh_token }))
@@ -87,8 +87,7 @@ impl ApiClient {
 
         let new_session = Session::from_login_data(&login_data, &session.device_id);
         *session = new_session;
-
-        Ok(login_data)
+        Ok(())
     }
 
     pub async fn create_lounge(&self, session: &Session) -> Result<Lounge> {
