@@ -1,10 +1,12 @@
+use crate::auth;
 use crate::https::ApiClient;
 use crate::models::Session;
 use anyhow::{Error, Result};
 
 pub async fn login() -> Result<(), Error> {
     // TODO
-    let device_id = "token generated from machine id";
+    let device_id = auth::get_device_id()?;
+    println!("device id: {}", device_id);
     let api = ApiClient::new(&device_id)?;
 
     let code = api.get_code().await?;
