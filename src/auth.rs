@@ -1,30 +1,24 @@
 use crate::models::Session;
 use anyhow::{Context, Error, Result};
+use hex;
+use sha2::{Digest, Sha256};
 use std::{env, fs};
 use winreg::HKLM;
 
 pub fn get_device_id() -> Result<String> {
-    match std::env::consts::OS {
-        "linux" => {
-            let mID = fs::read_to_string("/etc/machine-id")
-                .or_else(|_| fs::read_to_string("/var/lib/dbus/machine-id"))
-                .context("Failed to read Linux machine-id from standard locations")?
-                .trim()
-                .to_string();
+    let m_id: String = match std::env::consts::OS {
+        "linux" => fs::read_to_string("/etc/machine-id")
+            .or_else(|_| fs::read_to_string("/var/lib/dbus/machine-id"))
+            .context("Failed to read Linux machine-id from standard locations")?,
+        "windows" => HKLM
+            .open_subkey("SOFTWARE\\Microsoft\\Cryptography")?
+            .get_value("MachineGuid")?,
+        _ => anyhow::bail!("Unsupported OS :("),
+    };
 
-            Ok("linux no work yet".to_string())
-        }
-        "windows" => {
-            let mID: String = HKLM
-                .open_subkey("SOFTWARE\\Microsoft\\Cryptography")?
-                .get_value("MachineGuid")?;
+    let hash = Sha256::digest(&m_id.trim());
 
-            Ok("Windows no work yet".to_string())
-        }
-        _ => {
-            anyhow::bail!("Unsupported OS :(")
-        }
-    }
+    Ok(hex::encode(&hash[..8]))
 }
 
 pub fn new_session() -> Result<Session, Error> {

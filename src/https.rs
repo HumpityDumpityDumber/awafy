@@ -18,8 +18,9 @@ impl ApiClient {
 
         headers.insert(CONTENT_TYPE, HeaderValue::from_static(JSON_TYPE));
         headers.insert(ACCEPT, HeaderValue::from_static(JSON_TYPE));
-        headers.insert("X-Device-Id-Type", HeaderValue::from_static("4"));
+        headers.insert("X-Device-Id-Type", HeaderValue::from_static("3"));
         headers.insert("X-Device-Id", HeaderValue::from_str(device_id)?);
+        headers.insert("X-Platform", HeaderValue::from_str("AWAfy")?);
 
         let client = Client::builder()
             .default_headers(headers)
