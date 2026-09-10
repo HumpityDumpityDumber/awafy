@@ -17,12 +17,12 @@ Set the environment variable AWAFY_TOKEN to this value before running awafy in d
 
 ## Timeline
 
-- [x] Finish device ID generation based on machine ID/GUID on Windows and Linux for API requests | 9/19
-- [ ] Websocket connection to socket-gateway.awa.fm | 10/1
-- [ ] Printing websocket messages to shell | 10/14
-- [ ] Consume websocket messages and print formatted messages to shell | 10/21
-- [ ] Keep lounge paused (listen for unpause messages and repause) | 10/28
-- [ ] Full queue syncing | 11/28
+- [x] Finish device ID generation based on machine ID/GUID on Windows and Linux for API requests | 9/11
+- [ ] Websocket connection to socket-gateway.awa.fm | 9/25
+- [ ] Printing websocket messages to shell | 10/1
+- [ ] Consume websocket messages and print formatted messages to shell | 10/8
+- [ ] Keep lounge paused (listen for unpause messages and repause) | 10/18
+- [ ] Full queue syncing | 11/18
 ---
 - [ ] Player side of program | Remainder
 
