@@ -17,15 +17,16 @@ Set the environment variable AWAFY_TOKEN to this value before running awafy in d
 
 ## Timeline
 
-- [x] Finish device ID generation based on machine ID/GUID on Windows and Linux for API requests | 9/19
-- [ ] Websocket connection to socket-gateway.awa.fm | 10/1
-- [ ] Printing websocket messages to shell | 10/14
-- [ ] Consume websocket messages and print formatted messages to shell | 10/21
-- [ ] Keep lounge paused (listen for unpause messages and repause) | 10/28
+- [x] Finish device ID generation based on machine ID/GUID on Windows and Linux for API requests | 9/11
+- [x] SocketIO connection to socket-gateway.awa.fm | 9/11
+- [ ] Printing websocket messages to shell | 9/19
+- [ ] Consume websocket messages and print formatted messages to shell | 9/26
+- [ ] Keep lounge paused (listen for unpause messages and repause) | 10/2
 - [ ] Full queue syncing | 11/28
 ---
 - [ ] Player side of program | Remainder
 
 ## Dev Log
 
+9/10 | Device ID generation is finished yay it was easy just hashing the machine ids so it stays consistant on a single device :P
 

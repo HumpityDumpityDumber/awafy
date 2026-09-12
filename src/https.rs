@@ -32,6 +32,7 @@ impl ApiClient {
 
     fn attach_auth(&self, req: RequestBuilder, session: Option<&Session>) -> RequestBuilder {
         if let Some(session) = session {
+            dbg!(&session.access_token.as_str());
             req.header("X-Access-Token", session.access_token.as_str())
         } else {
             req
