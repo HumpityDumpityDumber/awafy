@@ -6,7 +6,6 @@ use rust_socketio::{
     asynchronous::{Client, ClientBuilder},
 };
 use serde_json::json;
-use tokio::time::{Duration, sleep};
 use urlencoding::encode;
 
 pub async fn main() -> Result<(), Error> {
@@ -28,16 +27,15 @@ pub async fn main() -> Result<(), Error> {
     );
 
     let room_connect = json!({"roomId": lounge.id.clone()}).to_string();
-    
-let join_room = |p: Payload, s: Client| {
-    async move {
-    s
-        .emit("send:user:joined", &room_connect)
-        .await
-        .expect("Failed to join room");
-        
-    }.boxed()
-}
+
+    let join_room = |p: Payload, s: Client| {
+        async move {
+            s.emit("send:user:joined", &room_connect)
+                .await
+                .expect("Failed to join room");
+        }
+        .boxed()
+    };
 
     let socket = ClientBuilder::new(socket_url)
         .on("receive:user:joined", |_payload, _socket| {
@@ -57,7 +55,6 @@ let join_room = |p: Payload, s: Client| {
         .connect()
         .await
         .expect("Connection failed");
-
 
     tokio::signal::ctrl_c().await?;
 
