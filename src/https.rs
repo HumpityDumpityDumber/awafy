@@ -123,6 +123,22 @@ impl ApiClient {
         Ok(lounge)
     }
 
+    pub async fn finish_lounge(&self, lounge: &Lounge, session: &Session) -> Result<()> {
+        let _response: Value = self
+            .request(
+                Method::POST,
+                format!("/v6/room/{}/archive", lounge.id).as_str(),
+                Some(session),
+            )
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn fetch_queue(&self, lounge: &Lounge, session: &Session) -> Result<Queue> {
         let response: Value = self
             .request(
@@ -135,6 +151,8 @@ impl ApiClient {
             .error_for_status()?
             .json()
             .await?;
+
+        dbg!(&response["playerState"]);
 
         if let Some(tracks) = response["mediaQueue"]["mediaPlaylist"]["mediaTracks"].as_array() {
             let queue = Queue(
