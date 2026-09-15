@@ -4,33 +4,51 @@
 
 Current state:
 ```
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.64s
-     Running `target\debug\awafy.exe login`
-device id: Windows no work yet
-#######
-Code not authorized! Trying again in 3 seconds...
-Code not authorized! Trying again in 3 seconds...
-logged in as user knee!
-This is your refresh token: ##########################
-Set the environment variable AWAFY_TOKEN to this value before running awafy in daemon mode.
+[src\https.rs:35:13] &session.access_token.as_str() = "a:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmaGRxb21pYTZ6aHJsb2psaTVyaGZ3b2JkaSIsImV4cCI6MTc4OTU2MTUwNiwiaWF0IjoxNzg5NDc1MTA2LCJqdGkiOiI3MGRkZTk1MC0yOTc4LTRiM2ItYWYyZS02NjJiMDhiZDZhMmMifQ.W9vRP2ViqUxryA0vuTvTbd3muR9FJnMV3HIu9QrKSEs"
+[src\https.rs:35:13] &session.access_token.as_str() = "a:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmaGRxb21pYTZ6aHJsb2psaTVyaGZ3b2JkaSIsImV4cCI6MTc4OTU2MTUwNiwiaWF0IjoxNzg5NDc1MTA2LCJqdGkiOiI3MGRkZTk1MC0yOTc4LTRiM2ItYWYyZS02NjJiMDhiZDZhMmMifQ.W9vRP2ViqUxryA0vuTvTbd3muR9FJnMV3HIu9QrKSEs"
+[src\https.rs:155:9] &response["playerState"] = Object {}
+[src\commands\daemon.rs:33:5] &lounge.name = "odontoid 螺旋 [ねじ]"
+[src\commands\daemon.rs:34:5] &lounge.id = "6aa939244114dd4c0400b97e"
+User joined: {
+  "id": "fhdqomia6zhrlojli5rhfwobdi",
+  "isEssentialLiver": false,
+  "isPickedOutLiver": false,
+  "name": "knee",
+  "socketId": "IEKjRG8l6TBmtbivAAou",
+  "updatedAt": 1789475106,
+  "uploadedAt": 1750654445
+}
+[src\commands\daemon.rs:87:41] "Unrecognized message string:" = "Unrecognized message string:"
+[src\commands\daemon.rs:87:41] other = Some(
+    "receive:owner:user_list:update:v1",
+)
+User joined: {
+  "id": "fhdqomia6zhrlojli5rhfwobdi",
+  "isEssentialLiver": false,
+  "isPickedOutLiver": false,
+  "name": "knee",
+  "socketId": "6B3QHV3DidASZ1d4ADIv",
+  "updatedAt": 1789475106,
+  "uploadedAt": 1750654445
+}
+User joined: {
+  "id": "fhdqomia6zhrlojli5rhfwobdi",
+  "isEssentialLiver": false,
+  "isPickedOutLiver": false,
+  "name": "knee",
+  "socketId": "gb6v0MesfkSM7IU2AAF_",
+  "updatedAt": 1789475106,
+  "uploadedAt": 1750654445
+}
 ```
 
 ## Timeline
 
 - [x] Finish device ID generation based on machine ID/GUID on Windows and Linux for API requests | 9/11
-<<<<<<< HEAD
 - [x] SocketIO connection to socket-gateway.awa.fm | 9/11
-- [ ] Printing websocket messages to shell | 9/19
-- [ ] Consume websocket messages and print formatted messages to shell | 9/26
+- [x] Printing websocket messages to shell | 9/14
 - [ ] Keep lounge paused (listen for unpause messages and repause) | 10/2
-- [ ] Full queue syncing | 11/28
-=======
-- [ ] Websocket connection to socket-gateway.awa.fm | 9/25
-- [ ] Printing websocket messages to shell | 10/1
-- [ ] Consume websocket messages and print formatted messages to shell | 10/8
-- [ ] Keep lounge paused (listen for unpause messages and repause) | 10/18
-- [ ] Full queue syncing | 11/18
->>>>>>> b70e2acfdb1928ab536094ff1b32f4c42e161c08
+- [ ] Full queue syncing | 10/9
 ---
 - [ ] Player side of program | Remainder
 
