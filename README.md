@@ -4,13 +4,13 @@
 
 Current state:
 ```
-[src\https.rs:35:13] &session.access_token.as_str() = "a:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmaGRxb21pYTZ6aHJsb2psaTVyaGZ3b2JkaSIsImV4cCI6MTc4OTU2MTUwNiwiaWF0IjoxNzg5NDc1MTA2LCJqdGkiOiI3MGRkZTk1MC0yOTc4LTRiM2ItYWYyZS02NjJiMDhiZDZhMmMifQ.W9vRP2ViqUxryA0vuTvTbd3muR9FJnMV3HIu9QrKSEs"
-[src\https.rs:35:13] &session.access_token.as_str() = "a:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmaGRxb21pYTZ6aHJsb2psaTVyaGZ3b2JkaSIsImV4cCI6MTc4OTU2MTUwNiwiaWF0IjoxNzg5NDc1MTA2LCJqdGkiOiI3MGRkZTk1MC0yOTc4LTRiM2ItYWYyZS02NjJiMDhiZDZhMmMifQ.W9vRP2ViqUxryA0vuTvTbd3muR9FJnMV3HIu9QrKSEs"
+[src\https.rs:35:13] &session.access_token.as_str() = "REDACTED"
+[src\https.rs:35:13] &session.access_token.as_str() = "REDACTED"
 [src\https.rs:155:9] &response["playerState"] = Object {}
 [src\commands\daemon.rs:33:5] &lounge.name = "odontoid 螺旋 [ねじ]"
 [src\commands\daemon.rs:34:5] &lounge.id = "6aa939244114dd4c0400b97e"
 User joined: {
-  "id": "fhdqomia6zhrlojli5rhfwobdi",
+  "id": "##########################",
   "isEssentialLiver": false,
   "isPickedOutLiver": false,
   "name": "knee",
@@ -23,7 +23,7 @@ User joined: {
     "receive:owner:user_list:update:v1",
 )
 User joined: {
-  "id": "fhdqomia6zhrlojli5rhfwobdi",
+  "id": "##########################",
   "isEssentialLiver": false,
   "isPickedOutLiver": false,
   "name": "knee",
@@ -32,7 +32,7 @@ User joined: {
   "uploadedAt": 1750654445
 }
 User joined: {
-  "id": "fhdqomia6zhrlojli5rhfwobdi",
+  "id": "##########################",
   "isEssentialLiver": false,
   "isPickedOutLiver": false,
   "name": "knee",
@@ -55,4 +55,6 @@ User joined: {
 ## Dev Log
 
 9/10 | Device ID generation is finished yay it was easy just hashing the machine ids so it stays consistant on a single device :P
-
+9/11 | SocketIO connection is working!
+9/13 | After figuring out how socketio kinda works I was able to grab the message for a user joining and the queue being updated
+9/14 | I changed the workflow to using tokio MPSC which i barely understand so i need to learn more about that
