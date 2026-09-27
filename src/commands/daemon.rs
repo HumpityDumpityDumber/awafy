@@ -8,12 +8,13 @@ use rust_socketio::{
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
+use tracing::{debug, error, info};
 use urlencoding::encode;
 
 async fn join_room(socket: &Client, room_id: &str) {
     let payload = json!({ "roomId": room_id });
     if let Err(e) = socket.emit("send:user:joined", payload).await {
-        eprintln!("Failed to join room: {e}");
+        error!("Failed to join room: {e}");
     }
 }
 
@@ -24,10 +25,9 @@ pub async fn main() -> Result<(), Error> {
     client.refresh_session(&mut session).await?;
 
     let mut lounge: Lounge = client.create_lounge(&session).await?;
-    client.update_queue(&mut lounge, &session).await?;
+    client.fetch_queue(&lounge.id, &session).await?;
 
-    dbg!(&lounge.name);
-    dbg!(&lounge.id);
+    info!("Lounge created: {}", serde_json::to_string_pretty(&lounge)?);
 
     let socket_url = format!(
         "https://socket-gateway.awa.fm?token={}&transport=websocket",
@@ -66,49 +66,47 @@ pub async fn main() -> Result<(), Error> {
 
     loop {
         tokio::select! {
-            Some((event, payload)) = rx.recv() => {
-                match event.as_str() {
-                    "receive:user:joined" => {
-                        if let Payload::Text(values) = payload {
-                            let info = values.first().unwrap().clone();
-                            let parsed: Value = serde_json::from_str(info.as_str().unwrap()).unwrap();
-                            println!("User joined: {}", serde_json::to_string_pretty(&parsed).unwrap());
+                Some((event, payload)) = rx.recv() => {
+                    match event.as_str() {
+                        "receive:user:joined" => {
+                            if let Payload::Text(values) = payload {
+                                let info = values.first().unwrap().clone();
+                                let parsed: Value = serde_json::from_str(info.as_str().unwrap()).unwrap();
+                                info!("User joined: {}", serde_json::to_string_pretty(&parsed).unwrap());
+                            }
                         }
-                    }
-                    "message" => {
-                        if let Payload::Text(values) = payload {
-                            if let Some(msg) = values.first() {
-                                match msg.as_str() {
-                                    Some("receive:queue:event:update") => {
-                                        let events = client.fetch_queue_events(&lounge, &session, None).await?;
-                                        lounge.update_queue_events(events);
-                                        dbg!(&lounge);
-                                    }
-                                    Some("receive:user:force_leave") => {
-                                        println!("Shutting down daemon...");
-                                        socket.disconnect().await?;
-                                        break
-                                    }
-                                    other => {
-                                        dbg!("Unrecognized message string:", other);
+                        "message" => {
+                            if let Payload::Text(values) = payload {
+                                if let Some(msg) = values.first() {
+                                    match msg.as_str() {
+                                        Some("receive:queue:event:update") => {
+                                            let events = client.fetch_queue_events(&lounge, &session, None).await?;
+                                            lounge.update_queue_events(events);
+                                            debug!("{:?}", &lounge);
+                                        }
+                                        Some("receive:user:force_leave") => {
+                                            break
+                                        }
+                                        other => {
+                                            debug!("Unrecognized message string: {:?}", other);
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    unrecognized => {
-                        dbg!("Unrecognized event:", unrecognized, &payload);
+                        unrecognized => {
+                            debug!("Unrecognized event: {} with payload: {:?}", unrecognized, &payload);
+                        }
                     }
                 }
+                _ = tokio::signal::ctrl_c() => {
+        client.finish_lounge(&lounge, &session).await?;
+                    break;
+                }
             }
-            _ = tokio::signal::ctrl_c() => {
-                println!("Shutting down daemon...");
-                socket.disconnect().await?;
-                client.finish_lounge(&lounge, &session).await?;
-                break;
-            }
-        }
     }
+    info!("Shutting down daemon...");
+    socket.disconnect().await?;
 
     Ok(())
 }

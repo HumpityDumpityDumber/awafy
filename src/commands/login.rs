@@ -6,14 +6,15 @@ use anyhow::{Error, Result};
 pub async fn login() -> Result<(), Error> {
     // TODO
     let device_id = auth::get_device_id()?;
-    dbg!(&device_id);
+    let device_name = auth::get_device_name(&device_id)?;
+    dbg!(&device_id, &device_name);
     let api = ApiClient::new(&device_id)?;
 
     let code = api.get_code().await?;
     println!("{}", code.code);
 
     let login_data = api.poll_login(&code).await?;
-    let credentials = Session::from_login_data(&login_data, &device_id);
+    let credentials = Session::from_login_data(&login_data, &device_id, &device_name);
 
     println!(
         "logged in as user {}!",

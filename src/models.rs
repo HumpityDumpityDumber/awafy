@@ -25,10 +25,11 @@ pub struct Session {
     pub token_expiry: i64,
     pub refresh_token: String,
     pub device_id: String,
+    pub device_name: String,
 }
 
 impl Session {
-    pub fn from_login_data(login_data: &Value, device_id: &str) -> Self {
+    pub fn from_login_data(login_data: &Value, device_id: &str, device_name: &str) -> Self {
         return Session {
             access_token: login_data["authData"]["refresh"]["accessToken"]
                 .as_str()
@@ -42,6 +43,7 @@ impl Session {
                 .expect("Missing refresh token")
                 .to_owned(),
             device_id: device_id.to_owned(),
+            device_name: device_name.to_owned(),
         };
     }
 }
@@ -60,7 +62,7 @@ pub struct Song {
     pub album_art: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Lounge {
     pub name: String,
     pub id: String,
@@ -122,7 +124,10 @@ pub struct PlayerState {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StreamingToken {
+    #[serde(rename = "accessToken")]
     token: String,
+    #[serde(rename = "expiredAt")]
     expiry: i64,
+    #[serde(rename = "expireTime")]
     expire_time: u32,
 }

@@ -1,9 +1,10 @@
-use crate::models::{Code, Lounge, Queue, QueueEvents, Session, Song};
+use crate::models::{Code, Lounge, Queue, QueueEvents, Session, Song, StreamingToken};
 use anyhow::{Context, Error, Result};
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
 use tokio::time::{Duration, sleep};
+use tracing::debug;
 
 const BASE_URL: &str = "https://api.awa.io";
 const JSON_TYPE: &str = "application/json";
@@ -67,7 +68,7 @@ impl ApiClient {
                 .await?;
 
             if response.status() == StatusCode::UNAUTHORIZED {
-                println!("Code not authorized! Trying again in 3 seconds...");
+                debug!("Code not authorized! Trying again in 3 seconds...");
                 sleep(Duration::from_secs(3)).await;
                 continue;
             }
@@ -88,21 +89,16 @@ impl ApiClient {
             .json()
             .await?;
 
-        let new_session = Session::from_login_data(&login_data, &session.device_id);
+        let new_session =
+            Session::from_login_data(&login_data, &session.device_id, &session.device_name);
         *session = new_session;
-        dbg!(&session.access_token);
+        debug!("{}", &session.access_token);
         Ok(())
     }
 
     pub async fn create_lounge(&self, session: &Session) -> Result<Lounge> {
-        let name = format!(
-            "{} {}",
-            random_word::get(random_word::Lang::En),
-            random_word::get(random_word::Lang::Ja)
-        );
-
         let payload = json!({
-            "name": name,
+            "name": session.device_name,
             "description": "",
             "topicText": "",
             "allowGifting": false,
@@ -169,7 +165,7 @@ impl ApiClient {
     }
 
     pub async fn get_streaming_token(&self, session: &Session) -> Result<StreamingToken> {
-        let response = self
+        let streaming_token = self
             .request(
                 Method::GET,
                 "https://api.awa.io/v4/device/token",
@@ -180,13 +176,15 @@ impl ApiClient {
             .error_for_status()?
             .json()
             .await?;
+
+        Ok(streaming_token)
     }
 
-    pub async fn update_queue(&self, lounge: &Lounge, session: &Session) -> Result<Queue> {
+    pub async fn fetch_queue(&self, lounge_id: &str, session: &Session) -> Result<Queue> {
         let response: Value = self
             .request(
                 Method::GET,
-                format!("/v6/room/{}/queue", lounge.id).as_str(),
+                format!("/v6/room/{}/queue", lounge_id).as_str(),
                 Some(session),
             )
             .send()

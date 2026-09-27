@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use tracing_subscriber::EnvFilter;
 
 mod commands;
 
@@ -25,6 +26,12 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
+
     let cli = Cli::parse();
 
     match &cli.command {
