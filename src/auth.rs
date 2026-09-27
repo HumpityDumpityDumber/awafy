@@ -28,5 +28,6 @@ pub fn new_session() -> Result<Session, Error> {
         refresh_token: env::var("AWAFY_TOKEN")?,
         device_id: get_device_id()?,
     };
+    dbg!(&session);
     Ok(session)
 }

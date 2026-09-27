@@ -3,6 +3,17 @@ use serde_json::Value;
 use std::sync::Mutex;
 use std::time::Duration;
 
+// #[derive(Serialize, Deserialize, Debug)]
+// enum QueueActions {
+//     Unknown: 0,
+//     Reset: 1,
+//     Add: 2,
+//     Remove: 3,
+//     Play: 4,
+//     Pause: 5,
+//     Move: 7,
+// }
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Code {
     pub code: String,
@@ -54,24 +65,64 @@ pub struct Lounge {
     pub name: String,
     pub id: String,
     #[serde(skip)]
-    pub state: Option<String>,
+    pub cursor: String,
+    #[serde(skip)]
+    pub state: bool,
     #[serde(rename = "mediaQueueId")]
     pub queue_id: String,
     #[serde(skip)]
-    queue: Option<Mutex<Queue>>,
+    pub queue: Option<Mutex<Vec<Song>>>,
+    #[serde(skip)]
+    pub last_id: String,
 }
 
 impl Lounge {
     pub fn update_queue(&mut self, queue: Queue) -> () {
-        self.queue = Some(Mutex::new(queue));
+        self.queue = Some(Mutex::new(queue.tracks));
+        self.cursor = queue.cursor;
+        self.last_id = queue.last_id;
+    }
+    pub fn update_queue_events(&mut self, events: QueueEvents) -> () {
+        // for a in events.events {
+        //     match a {
+        //         QueueActions::Play => {}
+        //         QueueActions::Pause => {}
+        //         _ => {}
+        //     }
+        // }
+        todo!()
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Queue(pub Vec<Song>);
+pub struct Queue {
+    pub tracks: Vec<Song>,
+    pub cursor: String,
+    pub last_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct QueueEvents {
+    events: Vec<String>,
+    cursor: String,
+    last_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct QueueUpdate {
+    queue: Queue,
+    state: bool,
+}
 
 pub struct PlayerState {
     playing: bool,
     position: Duration,
     song: Song,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StreamingToken {
+    token: String,
+    expiry: i64,
+    expire_time: u32,
 }

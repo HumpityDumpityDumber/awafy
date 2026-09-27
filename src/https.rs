@@ -1,4 +1,4 @@
-use crate::models::{Code, Lounge, Queue, Session, Song};
+use crate::models::{Code, Lounge, Queue, QueueEvents, Session, Song};
 use anyhow::{Context, Error, Result};
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
@@ -7,6 +7,7 @@ use tokio::time::{Duration, sleep};
 
 const BASE_URL: &str = "https://api.awa.io";
 const JSON_TYPE: &str = "application/json";
+const APK_VERSION: &str = "5.20.0";
 
 pub struct ApiClient {
     pub client: Client,
@@ -21,6 +22,7 @@ impl ApiClient {
         headers.insert("X-Device-Id-Type", HeaderValue::from_static("3"));
         headers.insert("X-Device-Id", HeaderValue::from_str(device_id)?);
         headers.insert("X-Platform", HeaderValue::from_str("AWAfy")?);
+        headers.insert("X-App-Version", HeaderValue::from_str(APK_VERSION)?);
 
         let client = Client::builder()
             .default_headers(headers)
@@ -30,9 +32,8 @@ impl ApiClient {
         Ok(Self { client })
     }
 
-    fn attach_auth(&self, req: RequestBuilder, session: Option<&Session>) -> RequestBuilder {
+    fn try_attach_auth(&self, req: RequestBuilder, session: Option<&Session>) -> RequestBuilder {
         if let Some(session) = session {
-            dbg!(&session.access_token.as_str());
             req.header("X-Access-Token", session.access_token.as_str())
         } else {
             req
@@ -42,7 +43,7 @@ impl ApiClient {
     fn request(&self, method: Method, path: &str, session: Option<&Session>) -> RequestBuilder {
         let url = format!("{BASE_URL}{path}");
         let req = self.client.request(method, url);
-        self.attach_auth(req, session)
+        self.try_attach_auth(req, session)
     }
 
     pub async fn get_code(&self) -> Result<Code> {
@@ -89,6 +90,7 @@ impl ApiClient {
 
         let new_session = Session::from_login_data(&login_data, &session.device_id);
         *session = new_session;
+        dbg!(&session.access_token);
         Ok(())
     }
 
@@ -139,7 +141,48 @@ impl ApiClient {
         Ok(())
     }
 
-    pub async fn fetch_queue(&self, lounge: &Lounge, session: &Session) -> Result<Queue> {
+    pub async fn fetch_queue_events(
+        &self,
+        lounge: &Lounge,
+        session: &Session,
+        cursor: Option<u64>,
+    ) -> Result<QueueEvents> {
+        let url: String = if cursor.is_some() {
+            format!(
+                "/v6/room/{}/queue/events?since={}",
+                lounge.id,
+                cursor.unwrap()
+            )
+        } else {
+            format!("/v6/room/{}/queue/events", lounge.id)
+        };
+
+        let events: QueueEvents = self
+            .request(Method::GET, url.as_str(), Some(session))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        Ok(events)
+    }
+
+    pub async fn get_streaming_token(&self, session: &Session) -> Result<StreamingToken> {
+        let response = self
+            .request(
+                Method::GET,
+                "https://api.awa.io/v4/device/token",
+                Some(&session),
+            )
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+    }
+
+    pub async fn update_queue(&self, lounge: &Lounge, session: &Session) -> Result<Queue> {
         let response: Value = self
             .request(
                 Method::GET,
@@ -152,11 +195,11 @@ impl ApiClient {
             .json()
             .await?;
 
-        dbg!(&response["playerState"]);
-
-        if let Some(tracks) = response["mediaQueue"]["mediaPlaylist"]["mediaTracks"].as_array() {
-            let queue = Queue(
-                tracks
+        let queue: Queue = if let Some(tracks) =
+            response["mediaQueue"]["mediaPlaylist"]["mediaTracks"].as_array()
+        {
+            Queue {
+                tracks: tracks
                     .iter()
                     .filter_map(|song| {
                         Some(Song {
@@ -167,11 +210,17 @@ impl ApiClient {
                         })
                     })
                     .collect(),
-            );
-
-            Ok(queue)
+                cursor: response["next"].to_string(),
+                last_id: response["id"].to_string(),
+            }
         } else {
-            Ok(Queue(Vec::new()))
-        }
+            Queue {
+                tracks: vec![],
+                cursor: response["next"].to_string(),
+                last_id: response["id"].to_string(),
+            }
+        };
+
+        Ok(queue)
     }
 }

@@ -1,3 +1,4 @@
+use crate::models::Lounge;
 use crate::{auth, https::ApiClient};
 use anyhow::{Context, Error, Result};
 use futures_util::FutureExt;
@@ -16,19 +17,14 @@ async fn join_room(socket: &Client, room_id: &str) {
     }
 }
 
-async fn queue_update_handler() {
-    todo!();
-}
-
 pub async fn main() -> Result<(), Error> {
     let mut session = auth::new_session().context("Failed to get credentials")?;
 
     let client = ApiClient::new(&session.device_id).context("Failed to build API client")?;
     client.refresh_session(&mut session).await?;
 
-    let mut lounge = client.create_lounge(&session).await?;
-    let queue = client.fetch_queue(&lounge, &session).await?;
-    lounge.update_queue(queue);
+    let mut lounge: Lounge = client.create_lounge(&session).await?;
+    client.update_queue(&mut lounge, &session).await?;
 
     dbg!(&lounge.name);
     dbg!(&lounge.id);
@@ -43,12 +39,18 @@ pub async fn main() -> Result<(), Error> {
     let (tx, mut rx) = mpsc::channel::<(String, Payload)>(32);
 
     let socket = ClientBuilder::new(socket_url)
-        .on("open", move |_, socket| {
+        .on(Event::Connect, move |_, socket| {
             let room_id = room_id.clone();
             async move {
                 join_room(&socket, &room_id).await;
             }
             .boxed()
+        })
+        .on(Event::Close, |_, _socket| {
+            async move { println!("socket closed!") }.boxed()
+        })
+        .on("error", |err, _| {
+            async move { eprintln!("Error: {:#?}", err) }.boxed()
         })
         .on_any(move |e: Event, p: Payload, _| {
             let tx = tx.clone();
@@ -78,10 +80,14 @@ pub async fn main() -> Result<(), Error> {
                             if let Some(msg) = values.first() {
                                 match msg.as_str() {
                                     Some("receive:queue:event:update") => {
-                                        let queue = client.fetch_queue(&lounge, &session).await?;
-                                        lounge.update_queue(queue);
-
+                                        let events = client.fetch_queue_events(&lounge, &session, None).await?;
+                                        lounge.update_queue_events(events);
                                         dbg!(&lounge);
+                                    }
+                                    Some("receive:user:force_leave") => {
+                                        println!("Shutting down daemon...");
+                                        socket.disconnect().await?;
+                                        break
                                     }
                                     other => {
                                         dbg!("Unrecognized message string:", other);
