@@ -210,12 +210,18 @@ impl ApiClient {
                     .collect(),
                 cursor: response["next"].to_string(),
                 last_id: response["id"].to_string(),
+                is_playing: if response["playerState"]["isPlaying"].as_bool() == Some(true) {
+                    true
+                } else {
+                    false
+                },
             }
         } else {
             Queue {
                 tracks: vec![],
                 cursor: response["next"].to_string(),
                 last_id: response["id"].to_string(),
+                is_playing: false,
             }
         };
 

@@ -82,7 +82,7 @@ pub async fn main() -> Result<(), Error> {
                                         Some("receive:queue:event:update") => {
                                             let events = client.fetch_queue_events(&lounge, &session, None).await?;
                                             lounge.update_queue_events(events);
-                                            debug!("{:?}", &lounge);
+                                            debug!("{}", serde_json::to_string_pretty(&lounge)?);
                                         }
                                         Some("receive:user:force_leave") => {
                                             break

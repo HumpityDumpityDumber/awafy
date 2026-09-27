@@ -69,7 +69,7 @@ pub struct Lounge {
     #[serde(skip)]
     pub cursor: String,
     #[serde(skip)]
-    pub state: bool,
+    pub is_playing: bool,
     #[serde(rename = "mediaQueueId")]
     pub queue_id: String,
     #[serde(skip)]
@@ -83,6 +83,7 @@ impl Lounge {
         self.queue = Some(Mutex::new(queue.tracks));
         self.cursor = queue.cursor;
         self.last_id = queue.last_id;
+        self.is_playing = queue.is_playing;
     }
     pub fn update_queue_events(&mut self, events: QueueEvents) -> () {
         // for a in events.events {
@@ -101,6 +102,7 @@ pub struct Queue {
     pub tracks: Vec<Song>,
     pub cursor: String,
     pub last_id: String,
+    pub is_playing: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
