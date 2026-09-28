@@ -9,6 +9,7 @@ mod models;
 
 mod auth;
 mod https;
+mod socket;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
