@@ -37,11 +37,11 @@ pub async fn main() -> Result<(), Error> {
                             if let Some(msg) = values.first() {
                                 match msg.as_str() {
                                     Some("receive:queue:event:update") => {
-                                        let events = client.fetch_queue_events(&lounge, &session, None).await?;
+                                        let events = client.fetch_queue_events(&lounge, &session).await?;
                                         lounge.update_queue_events(events);
-                                        debug!("{}", serde_json::to_string_pretty(&lounge)?);
+                                        info!("queue updated!");
                                         if lounge.is_playing == true {
-                                            todo!();
+                                            socket.pause(&lounge.get_playing().await, &session.device_id).await?;
                                         }
                                     }
                                     Some("receive:user:force_leave") => {

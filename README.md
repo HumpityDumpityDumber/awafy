@@ -67,7 +67,6 @@ Stretch goal
   - [ ] implement reaction based global pause and desync issues
 
 ## Dev Log
-
 - 9/10 | Device ID generation is finished yay it was easy just hashing the machine ids so it stays consistant on a single device :P
 - 9/11 | SocketIO connection is working!
 - 9/13 | After figuring out how socketio kinda works I was able to grab the message for a user joining and the queue being updated

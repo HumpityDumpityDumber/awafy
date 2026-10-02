@@ -3,17 +3,6 @@ use serde_json::Value;
 use std::sync::Mutex;
 use std::time::Duration;
 
-// #[derive(Serialize, Deserialize, Debug)]
-// enum QueueActions {
-//     Unknown: 0,
-//     Reset: 1,
-//     Add: 2,
-//     Remove: 3,
-//     Play: 4,
-//     Pause: 5,
-//     Move: 7,
-// }
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Code {
     pub code: String,
@@ -54,12 +43,24 @@ impl Session {
 //     pub name: String,
 // }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct QueueSong {
+    pub name: Option<String>,
+    pub track_id: String,
+    pub local_id: String,
+    pub album: Option<String>,
+    pub album_art: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Song {
-    pub name: String,
-    pub id: String,
-    pub album: String,
-    pub album_art: String,
+pub enum QueueAction {
+    Unknown,
+    Reset,
+    Add(Vec<QueueSong>),
+    Remove(String),
+    Play,
+    Pause,
+    Move { id: String, dest_id: String },
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -73,33 +74,65 @@ pub struct Lounge {
     #[serde(rename = "mediaQueueId")]
     pub queue_id: String,
     #[serde(skip)]
-    pub queue: Option<Mutex<Vec<Song>>>,
+    queue: Mutex<Vec<QueueSong>>,
     #[serde(skip)]
     pub last_id: String,
 }
 
 impl Lounge {
-    pub fn update_queue(&mut self, queue: Queue) -> () {
-        self.queue = Some(Mutex::new(queue.tracks));
+    pub async fn get_playing(&self) -> QueueSong {
+        let queue = self.queue.lock().unwrap();
+
+        queue[0].clone()
+    }
+    pub fn update_queue(&mut self, queue: Queue) {
+        self.queue = Mutex::new(queue.tracks);
         self.cursor = queue.cursor;
         self.last_id = queue.last_id;
         self.is_playing = queue.is_playing;
     }
-    pub fn update_queue_events(&mut self, events: QueueEvents) -> () {
-        // for a in events.events {
-        //     match a {
-        //         QueueActions::Play => {}
-        //         QueueActions::Pause => {}
-        //         _ => {}
-        //     }
-        // }
-        todo!()
+    pub fn update_queue_events(&mut self, events: QueueEvents) {
+        for a in events.events {
+            // 0 - Unkown
+            // 1 - Reset
+            // 2 - Add
+            // 3 - Remove
+            // 4 - Play
+            // 5 - Pause
+            // 7 - Move
+            let queue = &mut self.queue.lock().unwrap();
+
+            match a {
+                QueueAction::Unknown => (),
+                QueueAction::Reset => self.queue.lock().unwrap().clear(),
+                QueueAction::Add(mut tracks) => {
+                    queue.append(&mut tracks);
+                }
+                QueueAction::Remove(track_id) => {
+                    let pos = queue.iter().position(|t| track_id == t.local_id).unwrap();
+
+                    queue.remove(pos);
+                }
+                QueueAction::Play => self.is_playing = true,
+                QueueAction::Pause => self.is_playing = false,
+                QueueAction::Move { id, dest_id } => {
+                    let from = queue.iter().position(|t| id == t.local_id).unwrap();
+                    let to = queue.iter().position(|t| dest_id == t.local_id).unwrap();
+
+                    if from > to {
+                        queue[to..=from].rotate_right(1);
+                    } else {
+                        queue[from..=to].rotate_left(1);
+                    }
+                }
+            }
+        }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Queue {
-    pub tracks: Vec<Song>,
+    pub tracks: Vec<QueueSong>,
     pub cursor: String,
     pub last_id: String,
     pub is_playing: bool,
@@ -107,21 +140,21 @@ pub struct Queue {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct QueueEvents {
-    events: Vec<String>,
-    cursor: String,
-    last_id: String,
+    pub events: Vec<QueueAction>,
+    pub cursor: String,
+    pub last_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct QueueUpdate {
-    queue: Queue,
-    state: bool,
+pub struct QueueEvent {
+    action: QueueAction,
+    target_contents: Value,
 }
 
 pub struct PlayerState {
     playing: bool,
     position: Duration,
-    song: Song,
+    song: QueueSong,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

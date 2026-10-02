@@ -1,4 +1,4 @@
-use crate::models::Session;
+use crate::models::{Lounge, QueueSong, Session};
 use anyhow::{Context, Result};
 use futures_util::FutureExt;
 use rust_socketio::{
@@ -70,6 +70,26 @@ impl LoungeSocket {
             .disconnect()
             .await
             .context("Failed to disconnect socket")?;
+        Ok(())
+    }
+    pub async fn pause(&self, playing: &QueueSong, device_id: &str) -> Result<()> {
+        let payload = json!({"events": [
+            {
+                "action": 8,
+                "mediaTrackId": playing,
+                "clientId": device_id,
+                "seekPosition": 0,
+                "createdBy": {
+                    "id": device_id
+                }
+            }
+        ]});
+
+        self.client
+            .emit("send:queue:event:register", payload)
+            .await
+            .context("Failed to send pause message")?;
+
         Ok(())
     }
 }

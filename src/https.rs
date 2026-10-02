@@ -1,5 +1,6 @@
-use crate::models::{Code, Lounge, Queue, QueueEvents, Session, Song, StreamingToken};
+use crate::models::{Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session};
 use anyhow::{Context, Error, Result};
+use futures_util::stream::Skip;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
@@ -141,19 +142,13 @@ impl ApiClient {
         &self,
         lounge: &Lounge,
         session: &Session,
-        cursor: Option<u64>,
     ) -> Result<QueueEvents> {
-        let url: String = if cursor.is_some() {
-            format!(
-                "/v6/room/{}/queue/events?since={}",
-                lounge.id,
-                cursor.unwrap()
-            )
-        } else {
-            format!("/v6/room/{}/queue/events", lounge.id)
-        };
+        let url: String = format!(
+            "/v6/room/{}/queue/events?since={}",
+            lounge.id, lounge.cursor
+        );
 
-        let events: QueueEvents = self
+        let response: Value = self
             .request(Method::GET, url.as_str(), Some(session))
             .send()
             .await?
@@ -161,24 +156,60 @@ impl ApiClient {
             .json()
             .await?;
 
+        let events = QueueEvents {
+            events: response["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| match s["action"].as_u64().unwrap() {
+                    0 => QueueAction::Unknown,
+                    1 => QueueAction::Reset,
+                    2 => QueueAction::Add(
+                        s["targetContents"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|t| QueueSong {
+                                name: None,
+                                track_id: t["trackId"].to_string(),
+                                local_id: t["mediaTrackId"].to_string(),
+                                album: None,
+                                album_art: None,
+                            })
+                            .collect(),
+                    ),
+                    3 => QueueAction::Remove(s["mediaTrackId"].to_string()),
+                    4 => QueueAction::Play,
+                    5 => QueueAction::Pause,
+                    7 => QueueAction::Move {
+                        id: s["mediaTrackId"].to_string(),
+                        dest_id: s["destinationMediaTrackId"].to_string(),
+                    },
+                    _ => panic!(),
+                })
+                .collect(),
+            cursor: response["next"].to_string(),
+            last_id: response["id"].to_string(),
+        };
+
         Ok(events)
     }
 
-    pub async fn get_streaming_token(&self, session: &Session) -> Result<StreamingToken> {
-        let streaming_token = self
-            .request(
-                Method::GET,
-                "https://api.awa.io/v4/device/token",
-                Some(&session),
-            )
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
+    // pub async fn get_streaming_token(&self, session: &Session) -> Result<StreamingToken> {
+    //     let streaming_token = self
+    //         .request(
+    //             Method::GET,
+    //             "https://api.awa.io/v4/device/token",
+    //             Some(&session),
+    //         )
+    //         .send()
+    //         .await?
+    //         .error_for_status()?
+    //         .json()
+    //         .await?;
 
-        Ok(streaming_token)
-    }
+    //     Ok(streaming_token)
+    // }
 
     pub async fn fetch_queue(&self, lounge_id: &str, session: &Session) -> Result<Queue> {
         let response: Value = self
@@ -200,11 +231,12 @@ impl ApiClient {
                 tracks: tracks
                     .iter()
                     .filter_map(|song| {
-                        Some(Song {
-                            name: "placeholder name".to_string(),
-                            id: song.get("trackId")?.as_str()?.to_string(),
-                            album: "placeholder album".to_string(),
-                            album_art: "placeholder album art".to_string(),
+                        Some(QueueSong {
+                            name: None,
+                            track_id: song.get("trackId")?.as_str()?.to_string(),
+                            local_id: song.get("mediaTrackId")?.as_str()?.to_string(),
+                            album: None,
+                            album_art: None,
                         })
                     })
                     .collect(),
