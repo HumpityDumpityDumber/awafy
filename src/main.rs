@@ -23,6 +23,7 @@ struct Cli {
 enum Commands {
     Login,
     Daemon,
+    Name,
 }
 
 #[tokio::main]
@@ -38,5 +39,6 @@ async fn main() -> Result<(), anyhow::Error> {
     match &cli.command {
         Commands::Login {} => commands::login::login().await,
         Commands::Daemon {} => commands::daemon::main().await,
+        Commands::Name {} => commands::name::main().await,
     }
 }

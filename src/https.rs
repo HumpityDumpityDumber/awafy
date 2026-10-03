@@ -1,11 +1,10 @@
 use crate::models::{Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session};
 use anyhow::{Context, Error, Result};
-use futures_util::stream::Skip;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
 use tokio::time::{Duration, sleep};
-use tracing::debug;
+use tracing::{debug, info};
 
 const BASE_URL: &str = "https://api.awa.io";
 const JSON_TYPE: &str = "application/json";
@@ -97,6 +96,35 @@ impl ApiClient {
         Ok(())
     }
 
+    pub async fn existing_lounge(&self, session: &Session) -> Result<Option<Lounge>> {
+        let response: Value = self
+            .request(
+                Method::GET,
+                "/v6/me/rooms/recommends/sections",
+                Some(session),
+            )
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        if let Some(value) = response["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"].as_str() == Some("owner_section"))
+        {
+            let lounge: Lounge = serde_json::from_value::<Lounge>(
+                value["rooms"].as_array().unwrap().first().unwrap()["room"].clone(),
+            )?;
+
+            return Ok(Some(lounge));
+        } else {
+            return Ok(None);
+        };
+    }
+
     pub async fn create_lounge(&self, session: &Session) -> Result<Lounge> {
         let payload = json!({
             "name": session.device_name,
@@ -159,38 +187,40 @@ impl ApiClient {
         let events = QueueEvents {
             events: response["events"]
                 .as_array()
-                .unwrap()
+                .cloned()
+                .unwrap_or(vec![])
                 .iter()
-                .map(|s| match s["action"].as_u64().unwrap() {
-                    0 => QueueAction::Unknown,
+                .map(|s| match s["action"].as_u64().unwrap_or(0) {
                     1 => QueueAction::Reset,
                     2 => QueueAction::Add(
-                        s["targetContents"]
+                        s["targetContents"][0]["mediaTracks"]
                             .as_array()
                             .unwrap()
                             .iter()
                             .map(|t| QueueSong {
                                 name: None,
-                                track_id: t["trackId"].to_string(),
-                                local_id: t["mediaTrackId"].to_string(),
+                                track_id: t["trackId"].as_str().unwrap().to_string(),
+                                local_id: t["mediaTrackId"].as_str().unwrap().to_string(),
                                 album: None,
                                 album_art: None,
                             })
                             .collect(),
                     ),
-                    3 => QueueAction::Remove(s["mediaTrackId"].to_string()),
-                    4 => QueueAction::Play,
-                    5 => QueueAction::Pause,
+                    3 => QueueAction::Remove(s["mediaTrackId"].as_str().unwrap().to_string()),
+                    4 => QueueAction::Play(s["mediaTrackId"].as_str().unwrap().to_string()),
+                    5 => QueueAction::Pause(s["mediaTrackId"].as_str().unwrap().to_string()),
                     7 => QueueAction::Move {
-                        id: s["mediaTrackId"].to_string(),
-                        dest_id: s["destinationMediaTrackId"].to_string(),
+                        id: s["mediaTrackId"].as_str().unwrap().to_string(),
+                        dest_id: s["destinationMediaTrackId"].as_str().unwrap().to_string(),
                     },
-                    _ => panic!(),
+                    _ => QueueAction::Unknown,
                 })
                 .collect(),
-            cursor: response["next"].to_string(),
-            last_id: response["id"].to_string(),
+            cursor: response["next"].as_str().unwrap().to_string(),
+            last_id: response["id"].as_str().unwrap().to_string(),
         };
+
+        info!("events: {:#?}", events);
 
         Ok(events)
     }
@@ -230,30 +260,30 @@ impl ApiClient {
             Queue {
                 tracks: tracks
                     .iter()
-                    .filter_map(|song| {
-                        Some(QueueSong {
-                            name: None,
-                            track_id: song.get("trackId")?.as_str()?.to_string(),
-                            local_id: song.get("mediaTrackId")?.as_str()?.to_string(),
-                            album: None,
-                            album_art: None,
-                        })
+                    .map(|song| QueueSong {
+                        name: None,
+                        track_id: song["trackId"].as_str().unwrap().to_string(),
+                        local_id: song["mediaTrackId"].as_str().unwrap().to_string(),
+                        album: None,
+                        album_art: None,
                     })
                     .collect(),
-                cursor: response["next"].to_string(),
-                last_id: response["id"].to_string(),
+                cursor: response["next"].as_str().unwrap().to_string(),
+                last_id: response["id"].as_str().unwrap().to_string(),
                 is_playing: if response["playerState"]["isPlaying"].as_bool() == Some(true) {
                     true
                 } else {
                     false
                 },
+                pos_index: Some(response["mediaPlaylist"]["mediaTracks"].as_u64().unwrap() as usize),
             }
         } else {
             Queue {
                 tracks: vec![],
-                cursor: response["next"].to_string(),
-                last_id: response["id"].to_string(),
+                cursor: response["next"].as_str().unwrap().to_string(),
+                last_id: response["id"].as_str().unwrap().to_string(),
                 is_playing: false,
+                pos_index: None,
             }
         };
 

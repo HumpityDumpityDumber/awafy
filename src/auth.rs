@@ -1,28 +1,28 @@
 use crate::models::Session;
 use anyhow::{Context, Error, Result};
-use hex;
-use petname::Petnames;
+use machineid_rs::HWIDComponent;
+use machineid_rs::{Encryption, IdBuilder};
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
 use sha2::{Digest, Sha256};
-use std::{env, fs};
+use std::env;
 use tracing::debug;
-use winreg::HKLM;
 
 pub fn get_device_id() -> Result<String> {
-    let m_id: String = match std::env::consts::OS {
-        "linux" => fs::read_to_string("/etc/machine-id")
-            .or_else(|_| fs::read_to_string("/var/lib/dbus/machine-id"))
-            .context("Failed to read Linux machine-id from standard locations")?,
-        "windows" => HKLM
-            .open_subkey("SOFTWARE\\Microsoft\\Cryptography")?
-            .get_value("MachineGuid")?,
-        _ => anyhow::bail!("Unsupported OS :("),
-    };
+    let mut builder = IdBuilder::new(Encryption::SHA256);
+    builder
+        .add_component(HWIDComponent::SystemID)
+        .add_component(HWIDComponent::Username)
+        .add_component(HWIDComponent::MacAddress);
+    let m_id = builder.build("xxxAWAfySuperSecureString420xxx").unwrap();
 
-    let hash = Sha256::digest(&m_id.trim());
+    let mut hasher = Sha256::new();
+    hasher.update(m_id.as_bytes());
+    let result = hasher.finalize();
 
-    Ok(hex::encode(&hash[..8]))
+    let hex_string = hex::encode(result);
+
+    Ok(hex_string.chars().take(16).collect())
 }
 
 pub fn new_session() -> Result<Session, Error> {
@@ -45,9 +45,9 @@ pub fn get_device_name(device_id: &str) -> Result<String> {
 
     let mut rng = SmallRng::seed_from_u64(seed_u64);
 
-    let petnames = Petnames::default();
+    let petnames = petname::petnames!("names");
 
-    let name = petnames.namer(2, "-").iter(&mut rng).next().unwrap();
+    let name = petnames.namer(4, "-").iter(&mut rng).next().unwrap();
 
     Ok(name)
 }

@@ -1,4 +1,4 @@
-use crate::models::{Lounge, QueueSong, Session};
+use crate::models::{QueueSong, Session};
 use anyhow::{Context, Result};
 use futures_util::FutureExt;
 use rust_socketio::{
@@ -76,7 +76,7 @@ impl LoungeSocket {
         let payload = json!({"events": [
             {
                 "action": 8,
-                "mediaTrackId": playing,
+                "mediaTrackId": playing.local_id,
                 "clientId": device_id,
                 "seekPosition": 0,
                 "createdBy": {

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Mutex;
 use std::time::Duration;
+use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Code {
@@ -58,8 +59,8 @@ pub enum QueueAction {
     Reset,
     Add(Vec<QueueSong>),
     Remove(String),
-    Play,
-    Pause,
+    Play(String),
+    Pause(String),
     Move { id: String, dest_id: String },
 }
 
@@ -76,22 +77,30 @@ pub struct Lounge {
     #[serde(skip)]
     queue: Mutex<Vec<QueueSong>>,
     #[serde(skip)]
+    pub pos_index: Option<usize>,
+    #[serde(skip)]
     pub last_id: String,
 }
 
 impl Lounge {
-    pub async fn get_playing(&self) -> QueueSong {
+    pub async fn get_playing(&self) -> Option<QueueSong> {
         let queue = self.queue.lock().unwrap();
 
-        queue[0].clone()
+        Some(queue[self.pos_index?].clone())
     }
     pub fn update_queue(&mut self, queue: Queue) {
         self.queue = Mutex::new(queue.tracks);
         self.cursor = queue.cursor;
         self.last_id = queue.last_id;
         self.is_playing = queue.is_playing;
+        self.pos_index = queue.pos_index;
+
+        info!("queue updated: {:#?}", self);
     }
     pub fn update_queue_events(&mut self, events: QueueEvents) {
+        self.cursor = events.cursor;
+        self.last_id = events.last_id;
+
         for a in events.events {
             // 0 - Unkown
             // 1 - Reset
@@ -100,22 +109,33 @@ impl Lounge {
             // 4 - Play
             // 5 - Pause
             // 7 - Move
-            let queue = &mut self.queue.lock().unwrap();
-
             match a {
                 QueueAction::Unknown => (),
                 QueueAction::Reset => self.queue.lock().unwrap().clear(),
                 QueueAction::Add(mut tracks) => {
+                    let queue = &mut self.queue.lock().unwrap();
                     queue.append(&mut tracks);
                 }
                 QueueAction::Remove(track_id) => {
+                    let queue = &mut self.queue.lock().unwrap();
                     let pos = queue.iter().position(|t| track_id == t.local_id).unwrap();
 
                     queue.remove(pos);
                 }
-                QueueAction::Play => self.is_playing = true,
-                QueueAction::Pause => self.is_playing = false,
+                QueueAction::Play(track) => {
+                    let queue = &mut self.queue.lock().unwrap();
+
+                    self.is_playing = true;
+                    self.pos_index = Some(queue.iter().position(|t| track == t.local_id).unwrap());
+                }
+                QueueAction::Pause(track) => {
+                    let queue = &mut self.queue.lock().unwrap();
+
+                    self.is_playing = false;
+                    self.pos_index = Some(queue.iter().position(|t| track == t.local_id).unwrap());
+                }
                 QueueAction::Move { id, dest_id } => {
+                    let queue = &mut self.queue.lock().unwrap();
                     let from = queue.iter().position(|t| id == t.local_id).unwrap();
                     let to = queue.iter().position(|t| dest_id == t.local_id).unwrap();
 
@@ -127,6 +147,7 @@ impl Lounge {
                 }
             }
         }
+        info!("queue updated: {:#?}", self);
     }
 }
 
@@ -136,6 +157,7 @@ pub struct Queue {
     pub cursor: String,
     pub last_id: String,
     pub is_playing: bool,
+    pub pos_index: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -6,11 +6,9 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 clap = { version = "4.6.0", features = ["derive"] }
-directories = "6.0.0"
-env_logger = "0.11.11"
 futures-util = "0.3.34"
 hex = "0.4.3"
-keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+machineid-rs = "1.2.4"
 petname = "3.2.0"
 rand = "0.10.3"
 reqwest = { version = "0.13.2", features = ["json"] }
@@ -22,5 +20,3 @@ tokio = { version = "1.50.0", features = ["full"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 urlencoding = "2.1.3"
-uuid = { version = "1.22.0", features = ["v4"] }
-winreg = "0.56.0"

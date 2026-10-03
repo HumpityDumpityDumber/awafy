@@ -46,7 +46,7 @@ User joined: {
 - [x] Finish device ID generation based on machine ID/GUID on Windows and Linux for API requests | 9/11
 - [x] [SocketIO](https://socket.io) connection to socket-gateway.awa.fm | 9/11
 - [x] Printing websocket messages to shell | 9/14
-- [ ] Keep lounge paused | 9/20
+- [x] Keep lounge paused | 9/20
 - [ ] Parsing of song manifest | 9/27
 - [ ] Requesting and decoding of music chunks | 10/7
 - [ ] Finished audio playback | 10/15
