@@ -45,12 +45,17 @@ impl Session {
 // }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct QueueSong {
+pub struct Song {
     pub name: Option<String>,
     pub track_id: String,
-    pub local_id: String,
     pub album: Option<String>,
     pub album_art: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct QueueSong {
+    pub song: Song,
+    pub local_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -1,4 +1,4 @@
-use crate::models::{Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session};
+use crate::models::{Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session, Song};
 use anyhow::{Context, Error, Result};
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
@@ -198,11 +198,13 @@ impl ApiClient {
                             .unwrap()
                             .iter()
                             .map(|t| QueueSong {
-                                name: None,
-                                track_id: t["trackId"].as_str().unwrap().to_string(),
+                                song: Song {
+                                    album: None,
+                                    album_art: None,
+                                    name: None,
+                                    track_id: t["trackId"].as_str().unwrap().to_string(),
+                                },
                                 local_id: t["mediaTrackId"].as_str().unwrap().to_string(),
-                                album: None,
-                                album_art: None,
                             })
                             .collect(),
                     ),
@@ -261,11 +263,13 @@ impl ApiClient {
                 tracks: tracks
                     .iter()
                     .map(|song| QueueSong {
-                        name: None,
-                        track_id: song["trackId"].as_str().unwrap().to_string(),
+                        song: Song {
+                            album: None,
+                            album_art: None,
+                            name: None,
+                            track_id: song["trackId"].as_str().unwrap().to_string(),
+                        },
                         local_id: song["mediaTrackId"].as_str().unwrap().to_string(),
-                        album: None,
-                        album_art: None,
                     })
                     .collect(),
                 cursor: response["next"].as_str().unwrap().to_string(),
