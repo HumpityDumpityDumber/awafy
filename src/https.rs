@@ -275,7 +275,10 @@ impl ApiClient {
                 } else {
                     false
                 },
-                pos_index: Some(response["mediaPlaylist"]["mediaTracks"].as_u64().unwrap() as usize),
+                pos_index: response["mediaPlaylist"]
+                    .get("currentMediaTrackIndex")
+                    .and_then(|i| i.as_u64())
+                    .map(|i| i as usize),
             }
         } else {
             Queue {
