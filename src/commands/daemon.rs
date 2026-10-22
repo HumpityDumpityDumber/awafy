@@ -1,4 +1,5 @@
 use crate::models::Lounge;
+use crate::player::Player;
 use crate::socket::LoungeSocket;
 use crate::{auth, https::ApiClient};
 use anyhow::{Context, Result};
@@ -23,6 +24,8 @@ pub async fn main() -> Result<()> {
     let mut socket = LoungeSocket::connect(&session, lounge.id.clone()).await?;
     let queue = client.fetch_queue(&lounge.id, &session).await?;
     lounge.update_queue(queue);
+
+    let mut player = Player::new();
 
     loop {
         tokio::select! {

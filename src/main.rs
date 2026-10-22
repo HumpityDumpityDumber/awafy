@@ -9,6 +9,7 @@ mod models;
 
 mod auth;
 mod https;
+mod player;
 mod socket;
 
 #[derive(Parser)]

@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Mutex;
 use std::time::Duration;
 use tracing::info;
 
@@ -80,7 +79,7 @@ pub struct Lounge {
     #[serde(rename = "mediaQueueId")]
     pub queue_id: String,
     #[serde(skip)]
-    queue: Mutex<Vec<QueueSong>>,
+    queue: Vec<QueueSong>,
     #[serde(skip)]
     pub pos_index: Option<usize>,
     #[serde(skip)]
@@ -89,12 +88,10 @@ pub struct Lounge {
 
 impl Lounge {
     pub async fn get_playing(&self) -> Option<QueueSong> {
-        let queue = self.queue.lock().unwrap();
-
-        Some(queue[self.pos_index?].clone())
+        Some(self.queue[self.pos_index?].clone())
     }
     pub fn update_queue(&mut self, queue: Queue) {
-        self.queue = Mutex::new(queue.tracks);
+        self.queue = queue.tracks;
         self.cursor = queue.cursor;
         self.last_id = queue.last_id;
         self.is_playing = queue.is_playing;
@@ -116,38 +113,41 @@ impl Lounge {
             // 7 - Move
             match a {
                 QueueAction::Unknown => (),
-                QueueAction::Reset => self.queue.lock().unwrap().clear(),
+                QueueAction::Reset => self.queue.clear(),
                 QueueAction::Add(mut tracks) => {
-                    let queue = &mut self.queue.lock().unwrap();
-                    queue.append(&mut tracks);
+                    self.queue.append(&mut tracks);
                 }
                 QueueAction::Remove(track_id) => {
-                    let queue = &mut self.queue.lock().unwrap();
-                    let pos = queue.iter().position(|t| track_id == t.local_id).unwrap();
+                    let pos = self
+                        .queue
+                        .iter()
+                        .position(|t| track_id == t.local_id)
+                        .unwrap();
 
-                    queue.remove(pos);
+                    self.queue.remove(pos);
                 }
                 QueueAction::Play(track) => {
-                    let queue = &mut self.queue.lock().unwrap();
-
                     self.is_playing = true;
-                    self.pos_index = Some(queue.iter().position(|t| track == t.local_id).unwrap());
+                    self.pos_index =
+                        Some(self.queue.iter().position(|t| track == t.local_id).unwrap());
                 }
                 QueueAction::Pause(track) => {
-                    let queue = &mut self.queue.lock().unwrap();
-
                     self.is_playing = false;
-                    self.pos_index = Some(queue.iter().position(|t| track == t.local_id).unwrap());
+                    self.pos_index =
+                        Some(self.queue.iter().position(|t| track == t.local_id).unwrap());
                 }
                 QueueAction::Move { id, dest_id } => {
-                    let queue = &mut self.queue.lock().unwrap();
-                    let from = queue.iter().position(|t| id == t.local_id).unwrap();
-                    let to = queue.iter().position(|t| dest_id == t.local_id).unwrap();
+                    let from = self.queue.iter().position(|t| id == t.local_id).unwrap();
+                    let to = self
+                        .queue
+                        .iter()
+                        .position(|t| dest_id == t.local_id)
+                        .unwrap();
 
                     if from > to {
-                        queue[to..=from].rotate_right(1);
+                        self.queue[to..=from].rotate_right(1);
                     } else {
-                        queue[from..=to].rotate_left(1);
+                        self.queue[from..=to].rotate_left(1);
                     }
                 }
             }
