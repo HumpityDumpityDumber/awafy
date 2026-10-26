@@ -72,7 +72,11 @@ impl Player {
                         }
                     }));
 
-                    let cursor = AudioCursor(stream_tx);
+                    let cursor = AudioCursor {
+                        streamer: stream_tx,
+                        chunk: 0,
+                        offset: 0,
+                    };
 
                     let decoder = tokio::task::spawn_blocking(move || {
                         rodio::Decoder::builder()
@@ -118,10 +122,10 @@ impl PlayerHandle {
 
 async fn stream(track_id: String, rx: Receiver<ChunkRequest>, client: ApiClient) -> Result<()> {
     // Get streaming token
-    //
+
     // Fetch manifest
     // Request key
-    //
+
     // Cache will be a vec of chunkstate enums that are either empty
     // Pending (holds list of waiting recievers oneshot channels)
     // Ready (hold chunk bytes)
@@ -146,7 +150,11 @@ async fn stream(track_id: String, rx: Receiver<ChunkRequest>, client: ApiClient)
 
 type ChunkRequest = (u8, oneshot::Sender<Bytes>);
 
-pub struct AudioCursor(Sender<ChunkRequest>);
+pub struct AudioCursor {
+    streamer: Sender<ChunkRequest>,
+    chunk: u8,
+    offset: usize,
+}
 
 impl Read for AudioCursor {
     fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
