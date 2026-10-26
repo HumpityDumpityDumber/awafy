@@ -227,21 +227,21 @@ impl ApiClient {
         Ok(events)
     }
 
-    // pub async fn get_streaming_token(&self, session: &Session) -> Result<StreamingToken> {
-    //     let streaming_token = self
-    //         .request(
-    //             Method::GET,
-    //             "https://api.awa.io/v4/device/token",
-    //             Some(&session),
-    //         )
-    //         .send()
-    //         .await?
-    //         .error_for_status()?
-    //         .json()
-    //         .await?;
+    pub async fn get_streaming_token(&self, session: &Session) -> Result<StreamingToken> {
+        let streaming_token = self
+            .request(
+                Method::GET,
+                "https://api.awa.io/v4/device/token",
+                Some(&session),
+            )
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
 
-    //     Ok(streaming_token)
-    // }
+        Ok(streaming_token)
+    }
 
     pub async fn fetch_queue(&self, lounge_id: &str, session: &Session) -> Result<Queue> {
         let response: Value = self

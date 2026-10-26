@@ -1,4 +1,4 @@
-use std::io::{Read, Seek};
+use std::io::{self, Read, Seek};
 
 use anyhow::Result;
 use bytes::Bytes;
@@ -11,6 +11,8 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::error;
+
+use crate::{auth::get_device_id, https::ApiClient};
 
 enum PlayerCommand {
     Pause,
@@ -62,8 +64,10 @@ impl Player {
 
                     let (stream_tx, stream_rx) = mpsc::channel::<ChunkRequest>(32);
 
+                    let client = ApiClient::new(&get_device_id()?)?;
+
                     self.stream_task = Some(tokio::spawn(async move {
-                        if let Err(err) = stream(track_id, stream_rx).await {
+                        if let Err(err) = stream(track_id, stream_rx, client).await {
                             error!("Streaming failed: {err:#}");
                         }
                     }));
@@ -112,23 +116,30 @@ impl PlayerHandle {
     }
 }
 
-async fn stream(track_id: String, rx: Receiver<ChunkRequest>) -> Result<()> {
+async fn stream(track_id: String, rx: Receiver<ChunkRequest>, client: ApiClient) -> Result<()> {
+    // Get streaming token
+    //
     // Fetch manifest
-    // request key
+    // Request key
+    //
+    // Cache will be a vec of chunkstate enums that are either empty
+    // Pending (holds list of waiting recievers oneshot channels)
+    // Ready (hold chunk bytes)
 
     // TODO: Chunk fetch async function
-    // takes in uint
-    // Download segments
+    // Takes in u8
+    // Download segment
     // Decrypt
-    // Demux AAC
-    // Add ADTS headers
+    // Demux to raw AAC
+    // Wrap in ADTS headers
     // Add chunk to queue
-    // if given, send through oneshot channel
+    // If given, send through oneshot channel
 
     // TODO: Receive ChunkRequest
     // Check cache for chunk
-    // if its there send through oneshot channel
-    // else set off chunk fetch
+    // If its there send through oneshot channel
+    // If empty spawn chunk fetch
+    // If pending add oneshot channel to vec
 
     Ok(())
 }
@@ -138,13 +149,13 @@ type ChunkRequest = (u8, oneshot::Sender<Bytes>);
 pub struct AudioCursor(Sender<ChunkRequest>);
 
 impl Read for AudioCursor {
-    fn read() {
-        todo!()
+    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+        // TODO: IDFK HOW TO DO THIS
     }
 }
 
 impl Seek for AudioCursor {
     fn seek() {
-        todo!()
+        // TODO: IDFK HOW TO DO THIS EITHER
     }
 }

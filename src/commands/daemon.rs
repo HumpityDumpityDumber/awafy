@@ -27,6 +27,8 @@ pub async fn main() -> Result<()> {
 
     let mut player = Player::new();
 
+    // Start player task
+
     loop {
         tokio::select! {
             Some((event, payload)) = socket.recv() => {
