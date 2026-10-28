@@ -65,11 +65,11 @@ impl Player {
 
                     self.playback.stop();
 
-                    let (stream_tx, stream_rx) = mpsc::channel::<ChunkRequest>(32);
+                    let (stream_tx, mut stream_rx) = mpsc::channel::<ChunkRequest>(32);
                     let api = self.api.clone();
 
                     self.stream_task = Some(tokio::spawn(async move {
-                        if let Err(err) = stream(track_id, stream_rx, api).await {
+                        if let Err(err) = stream(track_id, &mut stream_rx, api).await {
                             error!("Streaming failed: {err:#}");
                         }
                     }));
@@ -124,7 +124,7 @@ impl PlayerHandle {
 
 enum Chunk {
     Empty,
-    Pending(Vec<oneshot::Sender<Vec<u8>>>),
+    Pending(Vec<oneshot::Sender<Bytes>>),
     Ready(Bytes),
 }
 
@@ -138,7 +138,7 @@ impl Clone for Chunk {
     }
 }
 
-async fn stream(track_id: String, rx: Receiver<ChunkRequest>, api: ApiClient) -> Result<()> {
+async fn stream(track_id: String, rx: &mut Receiver<ChunkRequest>, api: ApiClient) -> Result<()> {
     // Fetch manifest
     let manifest_bytes = api.fetch_manifest(&track_id).await?;
     // parse manifest
@@ -149,20 +149,40 @@ async fn stream(track_id: String, rx: Receiver<ChunkRequest>, api: ApiClient) ->
     let mut cache = vec![Chunk::Empty; manifest.segments.len()];
 
     // TODO: Receive ChunkRequest
-    // Check cache for chunk
-    // If its there send through oneshot channel
-    // If empty spawn chunk fetch
-    // If pending add oneshot channel to vec
+    while let Some((chunk_pos, tx_responder)) = rx.recv().await {
+        // Check cache for chunk
+        match &mut cache[chunk_pos] {
+            Chunk::Ready(chunk) => {
+                // If its there send through oneshot channel
+                tx_responder.send(chunk.clone());
+            }
+            Chunk::Pending(clients) => {
+                // If pending add oneshot channel to vec
+                clients.push(tx_responder);
+            }
+            Chunk::Empty => {
+                // If empty spawn chunk fetch
+                chunk_fetch(
+                    &manifest.segments[chunk_pos].uri,
+                    chunk_pos,
+                    api.clone(),
+                    &cache,
+                    Some(tx_responder),
+                )
+                .await
+            }
+        }
+    }
 
     Ok(())
 }
 
 async fn chunk_fetch(
     url: &str,
-    chunk_pos: u8,
+    chunk_pos: usize,
     api: ApiClient,
     cache: &Vec<Chunk>,
-    pending: Option<oneshot::Sender<Vec<u8>>>,
+    pending: Option<oneshot::Sender<Bytes>>,
 ) {
     // TODO: Set chunk to pending
     // open cache[chunk_pos] and set to pending()
@@ -175,7 +195,8 @@ async fn chunk_fetch(
     ts_demux(s_decrypted);
     // TODO: Add chunk to cache
     // at cache[chunk_pos] do the thing
-    // If given, send through oneshot channel
+    // TODO: Send through oneshot channel
+    // pending.send stuff
     todo!()
 }
 
@@ -183,11 +204,11 @@ async fn ts_demux(data: Vec<u8>) -> Vec<u8> {
     todo!()
 }
 
-type ChunkRequest = (u8, oneshot::Sender<Bytes>);
+type ChunkRequest = (usize, oneshot::Sender<Bytes>);
 
 pub struct AudioCursor {
     streamer: Sender<ChunkRequest>,
-    chunk: u8,
+    chunk: usize,
     offset: usize,
 }
 
