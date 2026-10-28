@@ -3,42 +3,31 @@ AWAfy is a music daemon that streams music from [AWA](https://awa.fm/) and uses 
 
 Current state:
 ```
-[src\https.rs:35:13] &session.access_token.as_str() = "REDACTED"
-[src\https.rs:35:13] &session.access_token.as_str() = "REDACTED"
-[src\https.rs:155:9] &response["playerState"] = Object {}
-[src\commands\daemon.rs:33:5] &lounge.name = "odontoid 螺旋 [ねじ]"
-[src\commands\daemon.rs:34:5] &lounge.id = "6aa939244114dd4c0400b97e"
-User joined: {
-  "id": "##########################",
+2026-10-28T15:51:10.301460Z  INFO awafy::commands::daemon: Lounge created: {
+  "name": "intensely-dreamily-iconic-n-buna",
+  "id": "6ae219edbf99e021b62d1a29",
+  "mediaQueueId": "room.6ae219edbf99e021b62d1a2a"
+}
+2026-10-28T15:51:12.259187Z  INFO awafy::models: queue updated: Lounge {
+    name: "intensely-dreamily-iconic-n-buna",
+    id: "6ae219edbf99e021b62d1a29",
+    cursor: "1793202669556198912",
+    is_playing: false,
+    queue_id: "room.6ae219edbf99e021b62d1a2a",
+    queue: [],
+    pos_index: None,
+    last_id: "6ae219eded012097a644bb9b",
+}
+2026-10-28T15:51:12.259914Z  INFO awafy::commands::daemon: User joined: {
+  "id": "fhdqomia6zhrlojli5rhfwobdi",
   "isEssentialLiver": false,
   "isPickedOutLiver": false,
   "name": "knee",
-  "socketId": "IEKjRG8l6TBmtbivAAou",
-  "updatedAt": 1789475106,
-  "uploadedAt": 1750654445
+  "socketId": "36aaxm_kNKm0s983AAC4",
+  "updatedAt": 1793202668,
+  "uploadedAt": 1789560545
 }
-[src\commands\daemon.rs:87:41] "Unrecognized message string:" = "Unrecognized message string:"
-[src\commands\daemon.rs:87:41] other = Some(
-    "receive:owner:user_list:update:v1",
-)
-User joined: {
-  "id": "##########################",
-  "isEssentialLiver": false,
-  "isPickedOutLiver": false,
-  "name": "knee",
-  "socketId": "6B3QHV3DidASZ1d4ADIv",
-  "updatedAt": 1789475106,
-  "uploadedAt": 1750654445
-}
-User joined: {
-  "id": "##########################",
-  "isEssentialLiver": false,
-  "isPickedOutLiver": false,
-  "name": "knee",
-  "socketId": "gb6v0MesfkSM7IU2AAF_",
-  "updatedAt": 1789475106,
-  "uploadedAt": 1750654445
-}
+2026-10-28T15:51:17.984338Z  INFO awafy::commands::daemon: Shutting down daemon...
 ```
 
 ## Timeline
