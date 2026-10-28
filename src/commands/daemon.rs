@@ -1,31 +1,30 @@
+use crate::https::ApiClient;
 use crate::models::Lounge;
 use crate::player::Player;
 use crate::socket::LoungeSocket;
-use crate::{auth, https::ApiClient};
 use anyhow::{Context, Result};
 use rust_socketio::Payload;
 use serde_json::Value;
 use tracing::{debug, info};
 
 pub async fn main() -> Result<()> {
-    let mut session = auth::new_session().context("Failed to get credentials")?;
+    let mut api = ApiClient::new().context("Failed to build API client")?;
+    api.refresh_session().await?;
 
-    let client = ApiClient::new(&session.device_id).context("Failed to build API client")?;
-    client.refresh_session(&mut session).await?;
-
-    let mut lounge: Lounge = if let Some(lounge) = client.existing_lounge(&session).await? {
+    let mut lounge: Lounge = if let Some(lounge) = api.existing_lounge().await? {
         lounge
     } else {
-        client.create_lounge(&session).await?
+        api.create_lounge().await?
     };
 
     info!("Lounge created: {}", serde_json::to_string_pretty(&lounge)?);
 
-    let mut socket = LoungeSocket::connect(&session, lounge.id.clone()).await?;
-    let queue = client.fetch_queue(&lounge.id, &session).await?;
+    let mut socket =
+        LoungeSocket::connect(&api.session.lock().await.clone(), lounge.id.clone()).await?;
+    let queue = api.fetch_queue(&lounge.id).await?;
     lounge.update_queue(queue);
 
-    let mut player = Player::new();
+    let mut player = Player::new(api.clone());
 
     // Start player task
 
@@ -45,10 +44,10 @@ pub async fn main() -> Result<()> {
                             if let Some(msg) = values.first() {
                                 match msg.as_str() {
                                     Some("receive:queue:event:update") => {
-                                        let events = client.fetch_queue_events(&lounge, &session).await?;
+                                        let events = api.fetch_queue_events(&lounge).await?;
                                         lounge.update_queue_events(events);
                                         if lounge.is_playing == true {
-                                            socket.pause(&lounge.get_playing().await.unwrap(), &session.device_id).await?;
+                                            socket.pause(&lounge.get_playing().await.unwrap(), &api.session.lock().await.clone().device_id).await?;
                                         }
                                     }
                                     Some("receive:user:force_leave") => {
@@ -67,7 +66,7 @@ pub async fn main() -> Result<()> {
                 }
             }
             _ = tokio::signal::ctrl_c() => {
-                client.finish_lounge(&lounge, &session).await?;
+                api.finish_lounge(&lounge).await?;
                 break;
             }
         }

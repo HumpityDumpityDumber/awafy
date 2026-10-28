@@ -2,6 +2,7 @@ use std::io::{self, Read, Seek};
 
 use anyhow::Result;
 use bytes::Bytes;
+use m3u8_rs::parse_media_playlist_res;
 use rodio::{MixerDeviceSink, Player as RodioPlayer};
 use tokio::{
     sync::{
@@ -12,7 +13,7 @@ use tokio::{
 };
 use tracing::error;
 
-use crate::{auth::get_device_id, https::ApiClient};
+use crate::https::ApiClient;
 
 enum PlayerCommand {
     Pause,
@@ -25,10 +26,11 @@ pub struct Player {
     playback: RodioPlayer,
     device: MixerDeviceSink,
     stream_task: Option<JoinHandle<()>>,
+    api: ApiClient,
 }
 
 impl Player {
-    pub async fn new() -> Result<(Self, PlayerHandle)> {
+    pub async fn new(api: ApiClient) -> Result<(Self, PlayerHandle)> {
         let (tx, rx) = mpsc::channel::<PlayerCommand>(32);
         let device = rodio::DeviceSinkBuilder::open_default_sink()?;
         let playback = RodioPlayer::connect_new(device.mixer());
@@ -39,6 +41,7 @@ impl Player {
                 playback,
                 device,
                 stream_task: None,
+                api,
             },
             PlayerHandle { tx },
         ))
@@ -63,11 +66,10 @@ impl Player {
                     self.playback.stop();
 
                     let (stream_tx, stream_rx) = mpsc::channel::<ChunkRequest>(32);
-
-                    let client = ApiClient::new(&get_device_id()?)?;
+                    let api = self.api.clone();
 
                     self.stream_task = Some(tokio::spawn(async move {
-                        if let Err(err) = stream(track_id, stream_rx, client).await {
+                        if let Err(err) = stream(track_id, stream_rx, api).await {
                             error!("Streaming failed: {err:#}");
                         }
                     }));
@@ -120,24 +122,31 @@ impl PlayerHandle {
     }
 }
 
-async fn stream(track_id: String, rx: Receiver<ChunkRequest>, client: ApiClient) -> Result<()> {
-    // Get streaming token
+enum Chunk {
+    Empty,
+    Pending(Vec<oneshot::Sender<Vec<u8>>>),
+    Ready(Bytes),
+}
 
+impl Clone for Chunk {
+    fn clone(&self) -> Self {
+        match self {
+            Chunk::Empty => Chunk::Empty,
+            Chunk::Ready(_) => panic!("Can't Clone non-Empty Chunks"),
+            Chunk::Pending(_) => panic!("Can't Clone non-Empty Chunks"),
+        }
+    }
+}
+
+async fn stream(track_id: String, rx: Receiver<ChunkRequest>, api: ApiClient) -> Result<()> {
     // Fetch manifest
-    // Request key
-
+    let manifest_bytes = api.fetch_manifest(&track_id).await?;
+    // parse manifest
+    let manifest = parse_media_playlist_res(&manifest_bytes).unwrap();
     // Cache will be a vec of chunkstate enums that are either empty
     // Pending (holds list of waiting recievers oneshot channels)
     // Ready (hold chunk bytes)
-
-    // TODO: Chunk fetch async function
-    // Takes in u8
-    // Download segment
-    // Decrypt
-    // Demux to raw AAC
-    // Wrap in ADTS headers
-    // Add chunk to queue
-    // If given, send through oneshot channel
+    let mut cache = vec![Chunk::Empty; manifest.segments.len()];
 
     // TODO: Receive ChunkRequest
     // Check cache for chunk
@@ -146,6 +155,32 @@ async fn stream(track_id: String, rx: Receiver<ChunkRequest>, client: ApiClient)
     // If pending add oneshot channel to vec
 
     Ok(())
+}
+
+async fn chunk_fetch(
+    url: &str,
+    chunk_pos: u8,
+    api: ApiClient,
+    cache: &Vec<Chunk>,
+    pending: Option<oneshot::Sender<Vec<u8>>>,
+) {
+    // TODO: Set chunk to pending
+    // open cache[chunk_pos] and set to pending()
+    // Download segment
+    let s = api.fetch_segment(url);
+    // TODO: Decrypt
+    // aes-cbc things
+    let s_decrypted = todo!();
+    // TODO: Demux to AAC-LC
+    ts_demux(s_decrypted);
+    // TODO: Add chunk to cache
+    // at cache[chunk_pos] do the thing
+    // If given, send through oneshot channel
+    todo!()
+}
+
+async fn ts_demux(data: Vec<u8>) -> Vec<u8> {
+    todo!()
 }
 
 type ChunkRequest = (u8, oneshot::Sender<Bytes>);

@@ -184,12 +184,12 @@ pub struct PlayerState {
     song: QueueSong,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct StreamingToken {
     #[serde(rename = "accessToken")]
-    token: String,
+    pub token: String,
     #[serde(rename = "expiredAt")]
-    expiry: i64,
+    pub expiry: i64,
     #[serde(rename = "expireTime")]
-    expire_time: u32,
+    pub expire_time: u32,
 }

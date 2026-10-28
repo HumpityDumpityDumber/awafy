@@ -1,5 +1,12 @@
-use crate::models::{Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session, Song};
+use std::sync::Arc;
+
+use crate::auth;
+use crate::models::{
+    Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session, Song, StreamingToken,
+};
 use anyhow::{Context, Error, Result};
+use bytes::Bytes;
+use futures_util::lock::Mutex;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
@@ -10,18 +17,22 @@ const BASE_URL: &str = "https://api.awa.io";
 const JSON_TYPE: &str = "application/json";
 const APK_VERSION: &str = "5.20.0";
 
+#[derive(Clone)]
 pub struct ApiClient {
     pub client: Client,
+    pub session: Arc<Mutex<Session>>,
+    pub streaming_token: Option<StreamingToken>,
 }
 
 impl ApiClient {
-    pub fn new(device_id: &str) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let mut headers = HeaderMap::new();
+        let session = auth::new_session().context("Failed to get credentials")?;
 
         headers.insert(CONTENT_TYPE, HeaderValue::from_static(JSON_TYPE));
         headers.insert(ACCEPT, HeaderValue::from_static(JSON_TYPE));
         headers.insert("X-Device-Id-Type", HeaderValue::from_static("3"));
-        headers.insert("X-Device-Id", HeaderValue::from_str(device_id)?);
+        headers.insert("X-Device-Id", HeaderValue::from_str(&session.device_id)?);
         headers.insert("X-Platform", HeaderValue::from_str("AWAfy")?);
         headers.insert("X-App-Version", HeaderValue::from_str(APK_VERSION)?);
 
@@ -30,7 +41,13 @@ impl ApiClient {
             .build()
             .context("Failed to build reqwest client")?;
 
-        Ok(Self { client })
+        let streaming_token = None;
+
+        Ok(Self {
+            client,
+            session: Arc::new(Mutex::new(session)),
+            streaming_token,
+        })
     }
 
     fn try_attach_auth(&self, req: RequestBuilder, session: Option<&Session>) -> RequestBuilder {
@@ -79,29 +96,39 @@ impl ApiClient {
         }
     }
 
-    pub async fn refresh_session(&self, session: &mut Session) -> Result<(), Error> {
+    pub async fn refresh_session(&mut self) -> Result<(), Error> {
+        let (refresh_token, device_id, device_name) = {
+            let session = self.session.lock().await;
+            (
+                session.refresh_token.clone(),
+                session.device_id.clone(),
+                session.device_name.clone(),
+            )
+        };
+
         let login_data: Value = self
             .request(Method::POST, "/v5/authorize", None)
-            .json(&json!({ "refreshToken": session.refresh_token }))
+            .json(&json!({ "refreshToken": refresh_token }))
             .send()
             .await?
             .error_for_status()?
             .json()
             .await?;
 
-        let new_session =
-            Session::from_login_data(&login_data, &session.device_id, &session.device_name);
-        *session = new_session;
-        debug!("{}", &session.access_token);
+        let new_session = Session::from_login_data(&login_data, &device_id, &device_name);
+
+        *self.session.lock().await = new_session;
         Ok(())
     }
 
-    pub async fn existing_lounge(&self, session: &Session) -> Result<Option<Lounge>> {
+    pub async fn existing_lounge(&self) -> Result<Option<Lounge>> {
+        let session = self.session.lock().await.clone();
+
         let response: Value = self
             .request(
                 Method::GET,
                 "/v6/me/rooms/recommends/sections",
-                Some(session),
+                Some(&session),
             )
             .send()
             .await?
@@ -125,7 +152,9 @@ impl ApiClient {
         };
     }
 
-    pub async fn create_lounge(&self, session: &Session) -> Result<Lounge> {
+    pub async fn create_lounge(&self) -> Result<Lounge> {
+        let session = &self.session.lock().await.clone();
+
         let payload = json!({
             "name": session.device_name,
             "description": "",
@@ -139,7 +168,7 @@ impl ApiClient {
         });
 
         let lounge = self
-            .request(Method::POST, "/v6/room", Some(session))
+            .request(Method::POST, "/v6/room", Some(&session))
             .json(&payload)
             .send()
             .await?
@@ -150,34 +179,52 @@ impl ApiClient {
         Ok(lounge)
     }
 
-    pub async fn finish_lounge(&self, lounge: &Lounge, session: &Session) -> Result<()> {
-        let _response: Value = self
-            .request(
-                Method::POST,
-                format!("/v6/room/{}/archive", lounge.id).as_str(),
-                Some(session),
-            )
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
+    pub async fn finish_lounge(&self, lounge: &Lounge) -> Result<()> {
+        let session = &self.session.lock().await.clone();
+
+        self.request(
+            Method::POST,
+            format!("/v6/room/{}/archive", lounge.id).as_str(),
+            Some(&session),
+        )
+        .send()
+        .await?
+        .error_for_status()?;
 
         Ok(())
     }
 
-    pub async fn fetch_queue_events(
-        &self,
-        lounge: &Lounge,
-        session: &Session,
-    ) -> Result<QueueEvents> {
+    pub async fn fetch_segment(&self, url: &str) -> Result<Bytes> {
+        let response = self
+            .request(Method::GET, url, None)
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+
+        Ok(response)
+    }
+
+    pub async fn fetch_manifest(&self, track_id: &str) -> Result<Vec<u8>> {
+        let session = &self.session.lock().await.clone();
+
+        let streaming_token = self.streaming_token.clone().unwrap(); // FIX: replace with an if let
+
+        let response = self.request(Method::GET, &format!("https://api.awa.io/v4/tracks/{}/audio.m3u8?bitRate=320&audioType=0&accessToken={}", track_id, streaming_token.token), Some(session)).send().await?.error_for_status()?.bytes().await?;
+
+        Ok(response.to_vec())
+    }
+
+    pub async fn fetch_queue_events(&self, lounge: &Lounge) -> Result<QueueEvents> {
+        let session = &self.session.lock().await.clone();
         let url: String = format!(
             "/v6/room/{}/queue/events?since={}",
             lounge.id, lounge.cursor
         );
 
         let response: Value = self
-            .request(Method::GET, url.as_str(), Some(session))
+            .request(Method::GET, url.as_str(), Some(&session))
             .send()
             .await?
             .error_for_status()?
@@ -227,13 +274,10 @@ impl ApiClient {
         Ok(events)
     }
 
-    pub async fn get_streaming_token(&self, session: &Session) -> Result<StreamingToken> {
+    pub async fn get_streaming_token(&self) -> Result<StreamingToken> {
+        let session = &self.session.lock().await;
         let streaming_token = self
-            .request(
-                Method::GET,
-                "https://api.awa.io/v4/device/token",
-                Some(&session),
-            )
+            .request(Method::GET, "/v4/device/token", Some(&session))
             .send()
             .await?
             .error_for_status()?
@@ -243,12 +287,13 @@ impl ApiClient {
         Ok(streaming_token)
     }
 
-    pub async fn fetch_queue(&self, lounge_id: &str, session: &Session) -> Result<Queue> {
+    pub async fn fetch_queue(&self, lounge_id: &str) -> Result<Queue> {
+        let session = &self.session.lock().await;
         let response: Value = self
             .request(
                 Method::GET,
                 format!("/v6/room/{}/queue", lounge_id).as_str(),
-                Some(session),
+                Some(&session),
             )
             .send()
             .await?

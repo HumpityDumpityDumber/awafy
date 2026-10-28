@@ -4,11 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aes = "0.9.3"
 anyhow = "1.0.102"
 bytes = "1.12.1"
+cbc = "0.2.1"
 clap = { version = "4.6.0", features = ["derive"] }
 futures-util = "0.3.34"
 hex = "0.4.3"
+m3u8-rs = "6.0.1"
 machineid-rs = "1.2.4"
 petname = "3.2.0"
 rand = "0.10.3"
@@ -23,5 +26,4 @@ tokio = { version = "1.50.0", features = ["full"] }
 tokio-stream = "0.1.19"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-transmux = { version = "0.27.7", features = ["sample-aes"] }
 urlencoding = "2.1.3"
