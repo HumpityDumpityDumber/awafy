@@ -24,9 +24,10 @@ pub async fn main() -> Result<()> {
     let queue = api.fetch_queue(&lounge.id).await?;
     lounge.update_queue(queue);
 
-    let mut player = Player::new(api.clone());
+    let (player, player_handle) = Player::new(api.clone()).await?;
 
-    // Start player task
+    // start player.run in the background
+    tokio::spawn(player.run());
 
     loop {
         tokio::select! {
@@ -49,6 +50,7 @@ pub async fn main() -> Result<()> {
                                         if lounge.is_playing == true {
                                             socket.pause(&lounge.get_playing().await.unwrap(), &api.session.lock().await.clone().device_id).await?;
                                         }
+                                        player_handle.start(lounge.get_playing().await.unwrap().song.track_id).await?;
                                     }
                                     Some("receive:user:force_leave") => {
                                         break

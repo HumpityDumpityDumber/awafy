@@ -8,7 +8,7 @@ use anyhow::{Context, Error, Result};
 use bytes::Bytes;
 use futures_util::lock::Mutex;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
-use reqwest::{Client, Method, RequestBuilder, StatusCode};
+use reqwest::{Client, Method, RequestBuilder, Response, StatusCode};
 use serde_json::{Value, json};
 use tokio::time::{Duration, sleep};
 use tracing::{debug, info};
@@ -62,6 +62,16 @@ impl ApiClient {
         let url = format!("{BASE_URL}{path}");
         let req = self.client.request(method, url);
         self.try_attach_auth(req, session)
+    }
+
+    pub async fn generic_get(&self, url: &str) -> Result<Response> {
+        let response = self
+            .request(Method::GET, url, None)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        Ok(response)
     }
 
     pub async fn get_code(&self) -> Result<Code> {

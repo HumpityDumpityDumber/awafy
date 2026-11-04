@@ -8,7 +8,7 @@ pub async fn login() -> Result<(), Error> {
     let device_id = auth::get_device_id()?;
     let device_name = auth::get_device_name(&device_id)?;
     dbg!(&device_id, &device_name);
-    let api = ApiClient::new(&device_id)?;
+    let api = ApiClient::new()?;
 
     let code = api.get_code().await?;
     println!("{}", code.code);
