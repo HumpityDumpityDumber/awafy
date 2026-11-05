@@ -75,11 +75,11 @@ impl Player {
                     self.playback.stop();
 
                     let (stream_tx, mut stream_rx) = mpsc::channel::<ChunkRequest>(32);
-                    let api = self.api.clone();
+                    let mut api = self.api.clone();
 
                     // Start stream function
                     self.stream_task = Some(tokio::spawn(async move {
-                        if let Err(err) = stream(track_id, &mut stream_rx, api).await {
+                        if let Err(err) = stream(track_id, &mut stream_rx, &mut api).await {
                             error!("Streaming failed: {err:#}");
                         }
                     }));
@@ -142,7 +142,11 @@ enum Chunk {
     Ready(Bytes),
 }
 
-async fn stream(track_id: String, rx: &mut Receiver<ChunkRequest>, api: ApiClient) -> Result<()> {
+async fn stream(
+    track_id: String,
+    rx: &mut Receiver<ChunkRequest>,
+    api: &mut ApiClient,
+) -> Result<()> {
     // Fetch manifest
     let manifest_bytes = api.fetch_manifest(&track_id).await?;
     // parse manifest
@@ -159,12 +163,27 @@ async fn stream(track_id: String, rx: &mut Receiver<ChunkRequest>, api: ApiClien
     // Ready (hold chunk bytes)
     let mut cache: Vec<Chunk> = (0..manifest.segments.len()).map(|_| Chunk::Empty).collect();
 
+    // DEBUG PREFETCH WHOLE SONG
+    for i in 0..manifest.segments.len() {
+        chunk_fetch(
+            &manifest.segments[i].uri,
+            key,
+            i,
+            api.clone(),
+            &mut cache,
+            None,
+        )
+        .await?;
+    }
+
     // Receive ChunkRequest
     while let Some((chunk_pos, tx_responder)) = rx.recv().await {
         if chunk_pos >= cache.len() {
             let _ = tx_responder.send(Bytes::new());
             continue;
         }
+
+        // TODO: Prefetch 2 chunks
 
         // Check cache for chunk
         match &mut cache[chunk_pos] {
@@ -232,7 +251,7 @@ async fn chunk_fetch(
 
     // Download segment
     let s = api.fetch_segment(url).await?;
-    // TODO: Decrypt
+    // Decrypt
     let iv = (chunk_pos as u128).to_be_bytes();
     let s_decrypted = decrypt_segment(s, &key, &iv).await?;
     // Demux to AAC-LC

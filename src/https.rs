@@ -58,15 +58,22 @@ impl ApiClient {
         }
     }
 
-    fn request(&self, method: Method, path: &str, session: Option<&Session>) -> RequestBuilder {
-        let url = format!("{BASE_URL}{path}");
+    fn request(
+        &self,
+        use_base: bool,
+        method: Method,
+        path: &str,
+        session: Option<&Session>,
+    ) -> RequestBuilder {
+        let base = if use_base { BASE_URL } else { "" };
+        let url = format!("{base}{path}");
         let req = self.client.request(method, url);
         self.try_attach_auth(req, session)
     }
 
     pub async fn generic_get(&self, url: &str) -> Result<Response> {
         let response = self
-            .request(Method::GET, url, None)
+            .request(false, Method::GET, url, None)
             .send()
             .await?
             .error_for_status()?;
@@ -76,7 +83,7 @@ impl ApiClient {
 
     pub async fn get_code(&self) -> Result<Code> {
         let code = self
-            .request(Method::POST, "/v4/code", None)
+            .request(true, Method::POST, "/v4/code", None)
             .send()
             .await?
             .error_for_status()?
@@ -89,7 +96,7 @@ impl ApiClient {
     pub async fn poll_login(&self, code: &Code) -> Result<Value> {
         loop {
             let response = self
-                .request(Method::POST, "/v5/login/code", None)
+                .request(true, Method::POST, "/v5/login/code", None)
                 .json(code)
                 .send()
                 .await?;
@@ -117,7 +124,7 @@ impl ApiClient {
         };
 
         let login_data: Value = self
-            .request(Method::POST, "/v5/authorize", None)
+            .request(true, Method::POST, "/v5/authorize", None)
             .json(&json!({ "refreshToken": refresh_token }))
             .send()
             .await?
@@ -136,6 +143,7 @@ impl ApiClient {
 
         let response: Value = self
             .request(
+                true,
                 Method::GET,
                 "/v6/me/rooms/recommends/sections",
                 Some(&session),
@@ -178,7 +186,7 @@ impl ApiClient {
         });
 
         let lounge = self
-            .request(Method::POST, "/v6/room", Some(&session))
+            .request(true, Method::POST, "/v6/room", Some(&session))
             .json(&payload)
             .send()
             .await?
@@ -193,6 +201,7 @@ impl ApiClient {
         let session = &self.session.lock().await.clone();
 
         self.request(
+            true,
             Method::POST,
             format!("/v6/room/{}/archive", lounge.id).as_str(),
             Some(&session),
@@ -206,7 +215,7 @@ impl ApiClient {
 
     pub async fn fetch_segment(&self, url: &str) -> Result<Bytes> {
         let response = self
-            .request(Method::GET, url, None)
+            .request(false, Method::GET, url, None)
             .send()
             .await?
             .error_for_status()?
@@ -216,12 +225,28 @@ impl ApiClient {
         Ok(response)
     }
 
-    pub async fn fetch_manifest(&self, track_id: &str) -> Result<Vec<u8>> {
+    pub async fn fetch_manifest(&mut self, track_id: &str) -> Result<Vec<u8>> {
+        self.streaming_token = Some(self.get_streaming_token().await?);
+
         let session = &self.session.lock().await.clone();
 
         let streaming_token = self.streaming_token.clone().unwrap(); // FIX: replace with an if let
 
-        let response = self.request(Method::GET, &format!("https://api.awa.io/v4/tracks/{}/audio.m3u8?bitRate=320&audioType=0&accessToken={}", track_id, streaming_token.token), Some(session)).send().await?.error_for_status()?.bytes().await?;
+        let response = self
+            .request(
+                true,
+                Method::GET,
+                &format!(
+                    "/v4/tracks/{}/audio.m3u8?bitRate=320&audioType=0&accessToken={}",
+                    track_id, streaming_token.token
+                ),
+                Some(session),
+            )
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
 
         Ok(response.to_vec())
     }
@@ -234,7 +259,7 @@ impl ApiClient {
         );
 
         let response: Value = self
-            .request(Method::GET, url.as_str(), Some(&session))
+            .request(true, Method::GET, url.as_str(), Some(&session))
             .send()
             .await?
             .error_for_status()?
@@ -284,10 +309,10 @@ impl ApiClient {
         Ok(events)
     }
 
-    pub async fn get_streaming_token(&self) -> Result<StreamingToken> {
+    async fn get_streaming_token(&self) -> Result<StreamingToken> {
         let session = &self.session.lock().await;
         let streaming_token = self
-            .request(Method::GET, "/v4/device/token", Some(&session))
+            .request(true, Method::GET, "/v4/device/token", Some(&session))
             .send()
             .await?
             .error_for_status()?
@@ -301,6 +326,7 @@ impl ApiClient {
         let session = &self.session.lock().await;
         let response: Value = self
             .request(
+                true,
                 Method::GET,
                 format!("/v6/room/{}/queue", lounge_id).as_str(),
                 Some(&session),
