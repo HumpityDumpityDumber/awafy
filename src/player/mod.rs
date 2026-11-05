@@ -28,8 +28,13 @@ pub enum PlayerCommand {
     Start(String),
 }
 
+pub enum PlayerEvent {
+    SongFinished,
+}
+
 pub struct Player {
-    rx: Receiver<PlayerCommand>,
+    command_rx: Receiver<PlayerCommand>,
+    event_tx: Sender<PlayerEvent>,
     playback: RodioPlayer,
     _device: MixerDeviceSink,
     stream_task: Option<JoinHandle<()>>,
@@ -37,25 +42,29 @@ pub struct Player {
 }
 
 impl Player {
-    pub async fn new(api: ApiClient) -> Result<(Self, PlayerHandle)> {
-        let (tx, rx) = mpsc::channel::<PlayerCommand>(32);
+    pub async fn new(api: ApiClient) -> Result<(Self, PlayerHandle, Receiver<PlayerEvent>)> {
+        let (command_tx, command_rx) = mpsc::channel::<PlayerCommand>(32);
         let device = rodio::DeviceSinkBuilder::open_default_sink()?;
         let playback = RodioPlayer::connect_new(device.mixer());
 
+        let (event_tx, event_rx) = mpsc::channel::<PlayerEvent>(32);
+
         Ok((
             Self {
-                rx,
+                command_rx,
+                event_tx,
                 playback,
                 _device: device,
                 stream_task: None,
                 api,
             },
-            PlayerHandle { tx },
+            PlayerHandle { tx: command_tx },
+            event_rx,
         ))
     }
 
     pub async fn run(mut self) -> Result<()> {
-        while let Some(command) = self.rx.recv().await {
+        while let Some(command) = self.command_rx.recv().await {
             match command {
                 PlayerCommand::Play => {
                     self.playback.play();

@@ -1,7 +1,7 @@
-use crate::https::ApiClient;
 use crate::models::Lounge;
 use crate::player::Player;
 use crate::socket::LoungeSocket;
+use crate::{https::ApiClient, player::PlayerEvent};
 use anyhow::{Context, Result};
 use rust_socketio::Payload;
 use serde_json::Value;
@@ -24,13 +24,23 @@ pub async fn main() -> Result<()> {
     let queue = api.fetch_queue(&lounge.id).await?;
     lounge.update_queue(queue);
 
-    let (player, player_handle) = Player::new(api.clone()).await?;
+    // Create player channels
+    let (player, player_handle, mut playerevent_rx) = Player::new(api.clone()).await?;
 
-    // start player.run in the background
+    // Run player in the background
     tokio::spawn(player.run());
 
     loop {
         tokio::select! {
+            Some(event) = playerevent_rx.recv() => {
+                match event {
+                    PlayerEvent::SongFinished => {
+                        if let Some(song) = lounge.get_queue_song(1) {
+                            socket.pause(&song, &api.session.lock().await.clone().device_id).await?;
+                        }
+                    }
+                }
+            }
             Some((event, payload)) = socket.recv() => {
                 match event.as_str() {
                     "receive:user:joined" => {
@@ -38,6 +48,34 @@ pub async fn main() -> Result<()> {
                             let info = values.first().unwrap().clone();
                             let parsed: Value = serde_json::from_str(info.as_str().unwrap()).unwrap();
                             info!("User joined: {}", serde_json::to_string_pretty(&parsed).unwrap());
+                        }
+                    }
+                    "receive:message" => {
+                        if  let Payload::Text(values) = payload {
+                            let info =  values.first().unwrap().clone();
+                            let parsed: Value = serde_json::from_str(info.as_str().unwrap()).unwrap();
+
+                            if parsed["message"] == "PLAY" {
+                                player_handle.play().await?;
+                            }
+                            if parsed["message"] == "PAUSE" {
+                                player_handle.pause().await?;
+                            }
+                            // To skip forward and back we pause the
+                            // song before or after the current one
+                            if parsed["message"] == "SKIP_NEXT" {
+                                if let Some(song) = lounge.get_queue_song(1) {
+                                    socket.pause(&song, &api.session.lock().await.clone().device_id).await?;
+                                }
+                            }
+                            if parsed["message"] == "SKIP_BACK" {
+                                if let Some(song) = lounge.get_queue_song(1) {
+                                    socket.pause(&song, &api.session.lock().await.clone().device_id).await?;
+                                }
+                            }
+                            if parsed["message"] == "FINISH" {
+                                break
+                            }
                         }
                     }
                     "message" => {
@@ -48,9 +86,9 @@ pub async fn main() -> Result<()> {
                                         let events = api.fetch_queue_events(&lounge).await?;
                                         lounge.update_queue_events(events);
                                         if lounge.is_playing == true {
-                                            socket.pause(&lounge.get_playing().await.unwrap(), &api.session.lock().await.clone().device_id).await?;
+                                            socket.pause(&lounge.get_queue_song(0).unwrap(), &api.session.lock().await.clone().device_id).await?;
                                         }
-                                        player_handle.start(lounge.get_playing().await.unwrap().song.track_id).await?;
+                                        player_handle.start(lounge.get_queue_song(0).unwrap().song.track_id).await?;
                                     }
                                     Some("receive:user:force_leave") => {
                                         break

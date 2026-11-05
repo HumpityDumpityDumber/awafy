@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Code {
@@ -87,8 +87,15 @@ pub struct Lounge {
 }
 
 impl Lounge {
-    pub async fn get_playing(&self) -> Option<QueueSong> {
-        Some(self.queue[self.pos_index?].clone())
+    pub fn get_queue_song(&self, offset: isize) -> Option<QueueSong> {
+        let current_pos = self.pos_index? as isize;
+        let target_index = current_pos.checked_add(offset)?;
+
+        if target_index < 0 || target_index > self.queue.len() as isize {
+            return None;
+        }
+
+        self.queue.get(target_index as usize).cloned()
     }
     pub fn update_queue(&mut self, queue: Queue) {
         self.queue = queue.tracks;
