@@ -1,6 +1,7 @@
 use std::{
     io::{self, Read, Seek, SeekFrom},
     mem,
+    sync::Arc,
 };
 
 use aes::cipher::{KeyIvInit, block_padding::Pkcs7};
@@ -8,15 +9,16 @@ use aes::{Aes128, cipher::BlockModeDecrypt};
 use anyhow::{Result, anyhow};
 use bytes::Bytes;
 use m3u8_rs::parse_media_playlist_res;
-use rodio::{MixerDeviceSink, Player as RodioPlayer};
+use rodio::{MixerDeviceSink, Player as RodioPlayer, source::EmptyCallback};
 use tokio::{
     sync::{
+        Mutex,
         mpsc::{self, Receiver, Sender},
         oneshot,
     },
     task::JoinHandle,
 };
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::https::ApiClient;
 
@@ -111,6 +113,13 @@ impl Player {
 
                     // Attach new audio and start rodio playback
                     self.playback.append(decoder);
+
+                    let event_tx = self.event_tx.clone();
+
+                    self.playback.append(EmptyCallback::new(Box::new(move || {
+                        let _ = event_tx.try_send(PlayerEvent::SongFinished);
+                    })));
+
                     self.playback.play();
                 }
             }
@@ -170,20 +179,22 @@ async fn stream(
     // Cache will be a vec of chunkstate enums that are either empty
     // Pending (holds list of waiting recievers oneshot channels)
     // Ready (hold chunk bytes)
-    let mut cache: Vec<Chunk> = (0..manifest.segments.len()).map(|_| Chunk::Empty).collect();
+    let cache: Vec<Arc<Mutex<Chunk>>> = (0..manifest.segments.len())
+        .map(|_| Arc::new(Mutex::new(Chunk::Empty)))
+        .collect();
 
     // DEBUG PREFETCH WHOLE SONG
-    for i in 0..manifest.segments.len() {
-        chunk_fetch(
-            &manifest.segments[i].uri,
-            key,
-            i,
-            api.clone(),
-            &mut cache,
-            None,
-        )
-        .await?;
-    }
+    // for i in 0..manifest.segments.len() {
+    //     let url = manifest.segments[i].uri.clone();
+    //     let api = api.clone();
+    //     let chunk = Arc::clone(&cache[i]);
+
+    //     tokio::spawn(async move {
+    //         if let Err(err) = chunk_fetch(&url, key, i, api, chunk, None).await {
+    //             error!("Chunk fetch failed: {err:#}");
+    //         }
+    //     });
+    // }
 
     // Receive ChunkRequest
     while let Some((chunk_pos, tx_responder)) = rx.recv().await {
@@ -192,26 +203,42 @@ async fn stream(
             continue;
         }
 
-        // TODO: Prefetch 2 chunks
+        // Prefetch next two chunks
+        for next in (chunk_pos + 1)..(chunk_pos + 3).min(cache.len()) {
+            tokio::spawn(chunk_fetch(
+                manifest.segments[next].uri.clone(),
+                key,
+                next,
+                api.clone(),
+                Arc::clone(&cache[next]),
+                None,
+            ));
+        }
 
         // Check cache for chunk
-        match &mut cache[chunk_pos] {
-            Chunk::Ready(chunk) => {
+        let mut chunk = cache[chunk_pos].lock().await;
+
+        match &mut *chunk {
+            Chunk::Ready(bytes) => {
                 // If its there send through oneshot channel
-                let _ = tx_responder.send(chunk.clone());
+                let _ = tx_responder.send(bytes.clone());
+                debug!("chunk already cached");
             }
             Chunk::Pending(clients) => {
                 // If pending add oneshot channel to vec
                 clients.push(tx_responder);
             }
             Chunk::Empty => {
+                debug!("I need to fetch the chunk");
                 // If empty spawn chunk fetch
+                drop(chunk);
+
                 chunk_fetch(
-                    &manifest.segments[chunk_pos].uri,
+                    manifest.segments[chunk_pos].uri.clone(),
                     key,
                     chunk_pos,
                     api.clone(),
-                    &mut cache,
+                    Arc::clone(&cache[chunk_pos]),
                     Some(tx_responder),
                 )
                 .await?;
@@ -223,43 +250,47 @@ async fn stream(
 }
 
 async fn chunk_fetch(
-    url: &str,
+    url: String,
     key: [u8; 16],
     chunk_pos: usize,
     api: ApiClient,
-    cache: &mut Vec<Chunk>,
+    chunk: Arc<Mutex<Chunk>>,
     pending: Option<oneshot::Sender<Bytes>>,
 ) -> Result<()> {
     // Set chunk to pending
-    match &mut cache[chunk_pos] {
-        Chunk::Pending(senders) => {
-            // Already being downloaded add pending
-            if let Some(p) = pending {
-                senders.push(p);
-            }
+    {
+        let mut chunk = chunk.lock().await;
 
-            return Ok(());
-        }
-        Chunk::Ready(bytes) => {
-            // already downloaded send data
-            if let Some(p) = pending {
-                let _ = p.send(bytes.clone());
-            }
+        match &mut *chunk {
+            Chunk::Pending(senders) => {
+                // Already being downloaded add pending
+                if let Some(p) = pending {
+                    senders.push(p);
+                }
 
-            return Ok(());
-        }
-        Chunk::Empty => {
-            // Set the task to pending
-            let mut senders = Vec::new();
-            if let Some(p) = pending {
-                senders.push(p);
+                return Ok(());
             }
-            cache[chunk_pos] = Chunk::Pending(senders);
+            Chunk::Ready(bytes) => {
+                // already downloaded send data
+                if let Some(p) = pending {
+                    let _ = p.send(bytes.clone());
+                }
+
+                return Ok(());
+            }
+            Chunk::Empty => {
+                // Set the task to pending
+                let mut senders = Vec::new();
+                if let Some(p) = pending {
+                    senders.push(p);
+                }
+                *chunk = Chunk::Pending(senders);
+            }
         }
     }
 
     // Download segment
-    let s = api.fetch_segment(url).await?;
+    let s = api.fetch_segment(&url).await?;
     // Decrypt
     let iv = (chunk_pos as u128).to_be_bytes();
     let s_decrypted = decrypt_segment(s, &key, &iv).await?;
@@ -267,9 +298,9 @@ async fn chunk_fetch(
     let demuxed = demux::ts_demux(s_decrypted).await?;
 
     // Send pending oneshot channels if given
-    if let Chunk::Pending(senders) =
-        mem::replace(&mut cache[chunk_pos], Chunk::Ready(demuxed.clone()))
-    {
+    let mut chunk = chunk.lock().await;
+
+    if let Chunk::Pending(senders) = mem::replace(&mut *chunk, Chunk::Ready(demuxed.clone())) {
         for s in senders {
             let _ = s.send(demuxed.clone());
         }

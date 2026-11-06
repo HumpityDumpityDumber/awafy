@@ -72,7 +72,4 @@ Stretch goal
 
 ### KNOWN ISSUES
 - skip_next when on last song or skip_back when on first song crashes
-- prefetches entire songs instead of chunks
-- doesnt move to next song on song end
-  - need another channel to send messages back to daemon from player
 - doesnt always start playback requires adding a watcher for current song in lounge and trigger playback on change Anyone can play pause skip etc so i need to limit that to owner just check user that send message before acting on it
