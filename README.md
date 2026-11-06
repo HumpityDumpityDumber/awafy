@@ -37,23 +37,22 @@ Current state:
 - [x] Printing websocket messages to shell | 9/14
 - [x] Keep lounge paused | 9/20
 - [x] Full queue syncing | 10/1
-- [ ] Parsing of song manifest | 10/7
-- [ ] Requesting and decoding of music chunks | 10/15
-- [ ] Finished audio playback | 10/22
-- [ ] Fully integrate the two halves of the program | 10/29
+- [x] Research for player implementation | 10/7
+- [x] Design and test architecture | 10/14
+- [x] Finalize crates and architecture | 10/20
+- [x] Parsing of song manifest | 10/25
+- [x] Requesting and decoding of music chunks | 10/30
+- [x] Finished audio playback | 11/6
+- [ ] Reaction based volume controls | 11/16
+- [ ] Refactor caching to not be in streamer function
+prefetching of multiple songs for quick skipping and song changes.
+- [ ] Error handling overhaul to make more robust
+- [ ] UI interface for control
 Testing my program on the raspberry pi?
-- [ ] Windows SMTC | 11/6
-- [ ] Linux MPRIS | 11/11
-- [ ] Integrate favoriting a song into both MPRIS and SMTC | 11/18
-- [ ] Discord rpc integration | 11/25
-- [ ] Lastfm scrobbling | 12/1
-- [ ] Shuffle | 12/8
-- [ ] Add rejoining if an unexpected disconnection happens | 12/15
 Stretch goal
-- [ ] Add member daemon type
-  - [ ] -r flag with provided id joins existing lounge
-  - [ ] -a auto joins the most recently created lounge
-  - [ ] implement reaction based global pause and desync issues
+- [ ] Windows SMTC
+- [ ] Linux MPRIS
+- [ ] Discord rpc integration
 
 ## Dev Log
 - 9/10 | Device ID generation is finished yay it was easy just hashing the machine ids so it stays consistant on a single device :P
@@ -67,5 +66,6 @@ Stretch goal
 - 10/24 | I've put together the structure of the code with todo comments specifying the flow of the player. I'm behind but im confident I'm close to having minimal audio playback.
 - 11/2 | Random work, demuxer working (based on source material), player is in broken half finished state. Lots of just misc work on getting my plan for the player in place. Hopefully next journal entry will include functioning playback!
 - 11/5 | ITS PLAYING MUSIC, there is still an issue where its only starting playback on queue update from events so i need to fix that. Additionally, I also have a small workaround for prefetching where it fetches the entire song before playback because the cache needs to be a mutex or i need to only pass the chunk thats being edited. I also don't have it going to the next song after finishing playback of a song so I need to add that in. I think there is also a crash when opening an existing queue. The next step is fixing these issues and polishing everything up.
+- 11/6 | All issues fixed except for unauthed users ability to send play commands in chat.
 
 <img src="https://nomnoml.com/image.svg?source=%5B%3Cstart%3Estart%5D%0A%0A%5Bstart%5D%20-%3E%0A%5B%20login%20%7C%0A%5Bgenerate%20device%20id%5D%20-%3E%0A%5Bpost%20%2Fv4%2Fcode%5D%20-%3E%0A%5Bpost%20%2Fv5%2Flogin%2Fcode%5D%20-%3E%0A%5Bcreate%20session%20from%20login%20info%5D%20-%3E%0A%5Bspit%20out%20refresh%20token%5D%0A%5D%0A%0A%5Bstart%5D%20-%3E%0A%5B%20Daemon%20%7C%0A%5B%20Queue%20Manager%20%7C%0A%5Bread%20AWAFY_TOKEN%20env%20var%5D%20-%3E%0A%5Bfetch%20queue%5D%20-%3E%0A%5Bconnect%20to%20websocket%20%7C%0A%5Bkeep%20track%20of%20lounge%20state%5D%0A%5Blisten%20for%20unpause%20and%20repause%5D%0A%5Bkeep%20lounge%20queue%20in%20sync%20with%20local%5D%0A%5D%0A%5D%0A%0A%5BPlayer%20%7C%0A%5Bread%20top%20song%20from%20queue%5D%20-%3E%0A%5Bstream%20song%20audio%20%26%20update%20plater%20state%20%7C%0A%5Brequest%20manifest%5D%20-%3E%0A%5Bstream%20audio%20from%20manifest%20data%5D%0A%5D%0A%5D%0A%5D%0A%0A%0A%5BModels%20%7C%0A%5Blounge%20%7C%20%0ALounge%20ID%0AName%0AState%0AQueue%0A%5D%0A%5BSession%20%7C%0AAccess%20token%0AToken%20expiry%0ARefresh%20token%0ADevice%20ID%0A%5D%0A%5BSong%20%7C%0AAlbum%20art%0ASong%20name%0AAlbum%0ATrack%20ID%0A%5D%0A%5BPlayerState%20%7C%0APlaying%0APosition%0ASong%0A%5D%0A%5BCode%20%7C%0ACode%0A%5D%0A%5D%0A%0A%0A%0A%0A%0A%0A%0A%0A%0A"/>

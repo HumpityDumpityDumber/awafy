@@ -360,7 +360,7 @@ impl ApiClient {
                 } else {
                     false
                 },
-                pos_index: response["mediaPlaylist"]
+                pos_index: response["mediaQueue"]["mediaPlaylist"]
                     .get("currentMediaTrackIndex")
                     .and_then(|i| i.as_u64())
                     .map(|i| i as usize),
