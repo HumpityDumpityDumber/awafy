@@ -47,8 +47,8 @@ Current state:
 - [ ] Refactor caching to not be in streamer function,
 prefetching of multiple songs for quick skipping and song changes.
 - [ ] Error handling overhaul to make more robust
-- [ ] UI interface for control
-Testing my program on the raspberry pi?
+- [ ] UI interface for control (chrome extension or microui, widget etc)
+- [ ] Testing on the raspberry pi
 ### Stretch goal
 - [ ] Windows SMTC
 - [ ] Linux MPRIS
