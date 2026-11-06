@@ -44,12 +44,12 @@ Current state:
 - [x] Requesting and decoding of music chunks | 10/30
 - [x] Finished audio playback | 11/6
 - [ ] Reaction based volume controls | 11/16
-- [ ] Refactor caching to not be in streamer function
+- [ ] Refactor caching to not be in streamer function,
 prefetching of multiple songs for quick skipping and song changes.
 - [ ] Error handling overhaul to make more robust
 - [ ] UI interface for control
 Testing my program on the raspberry pi?
-Stretch goal
+### Stretch goal
 - [ ] Windows SMTC
 - [ ] Linux MPRIS
 - [ ] Discord rpc integration
