@@ -30,6 +30,10 @@ pub async fn main() -> Result<()> {
     // Run player in the background
     tokio::spawn(player.run());
 
+    if let Some(song) = lounge.get_queue_song(0) {
+        player_handle.start(song.song.track_id).await?;
+    }
+
     loop {
         tokio::select! {
             Some(event) = playerevent_rx.recv() => {
@@ -69,7 +73,7 @@ pub async fn main() -> Result<()> {
                                 }
                             }
                             if parsed["message"] == "SKIP_BACK" {
-                                if let Some(song) = lounge.get_queue_song(1) {
+                                if let Some(song) = lounge.get_queue_song(-1) {
                                     socket.pause(&song, &api.session.lock().await.clone().device_id).await?;
                                 }
                             }
@@ -83,12 +87,20 @@ pub async fn main() -> Result<()> {
                             if let Some(msg) = values.first() {
                                 match msg.as_str() {
                                     Some("receive:queue:event:update") => {
+                                        let previous_pos = lounge.pos_index;
+
                                         let events = api.fetch_queue_events(&lounge).await?;
                                         lounge.update_queue_events(events);
+
+                                        if lounge.pos_index != previous_pos {
+                                            if let Some(song) = lounge.get_queue_song(0) {
+                                                player_handle.start(song.song.track_id).await?;
+                                            }
+                                        }
+
                                         if lounge.is_playing == true {
                                             socket.pause(&lounge.get_queue_song(0).unwrap(), &api.session.lock().await.clone().device_id).await?;
                                         }
-                                        player_handle.start(lounge.get_queue_song(0).unwrap().song.track_id).await?;
                                     }
                                     Some("receive:user:force_leave") => {
                                         break
