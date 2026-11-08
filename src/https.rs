@@ -12,7 +12,7 @@ use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, RequestBuilder, Response, StatusCode};
 use serde_json::{Value, json};
 use tokio::time::{Duration, sleep};
-use tracing::{debug, info};
+use tracing::debug;
 
 const BASE_URL: &str = "https://api.awa.io";
 const JSON_TYPE: &str = "application/json";
@@ -294,7 +294,7 @@ impl AuthedClient {
             last_id: response["id"].as_str().unwrap().to_string(),
         };
 
-        info!("events: {:#?}", events);
+        debug!("events: {:#?}", events);
 
         Ok(events)
     }

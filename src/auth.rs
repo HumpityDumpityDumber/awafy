@@ -14,7 +14,9 @@ pub fn get_device_id() -> Result<String> {
         .add_component(HWIDComponent::SystemID)
         .add_component(HWIDComponent::Username)
         .add_component(HWIDComponent::MacAddress);
-    let m_id = builder.build("xxxAWAfySuperSecureString420xxx").unwrap();
+    let m_id = builder
+        .build("xxxAWAfySuperSecureString420xxx")
+        .expect("Failed to create a device id");
 
     let mut hasher = Sha256::new();
     hasher.update(m_id.as_bytes());

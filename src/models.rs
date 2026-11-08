@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
-use tracing::{debug, info};
+use tracing::{debug, error};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Code {
@@ -22,26 +22,20 @@ impl Session {
         return Session {
             access_token: login_data["authData"]["refresh"]["accessToken"]
                 .as_str()
-                .expect("Missing access token")
+                .expect("Failed to create session: missing access token")
                 .to_owned(),
             token_expiry: login_data["authData"]["refresh"]["expiresAt"]
                 .as_i64()
-                .expect("Missing token expiry"),
+                .expect("Failed to create session: missing token expiry"),
             refresh_token: login_data["authData"]["refresh"]["refreshToken"]
                 .as_str()
-                .expect("Missing refresh token")
+                .expect("Failed to create session: missing refresh token")
                 .to_owned(),
             device_id: device_id.to_owned(),
             device_name: device_name.to_owned(),
         };
     }
 }
-
-// #[derive(Serialize, Deserialize, Debug)]
-// pub struct UserInfo {
-//     pub id: String,
-//     pub name: String,
-// }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Song {
@@ -125,36 +119,45 @@ impl Lounge {
                     self.queue.append(&mut tracks);
                 }
                 QueueAction::Remove(track_id) => {
-                    let pos = self
-                        .queue
-                        .iter()
-                        .position(|t| track_id == t.local_id)
-                        .unwrap();
-
-                    self.queue.remove(pos);
+                    if let Some(pos) = self.queue.iter().position(|t| track_id == t.local_id) {
+                        self.queue.remove(pos);
+                    } else {
+                        error!("Attempted to remove song not in queue")
+                    }
                 }
                 QueueAction::Play(track) => {
-                    self.is_playing = true;
-                    self.pos_index =
-                        Some(self.queue.iter().position(|t| track == t.local_id).unwrap());
+                    if let Some(pos_index) =
+                        Some(self.queue.iter().position(|t| track == t.local_id))
+                    {
+                        self.is_playing = true;
+                        self.pos_index = pos_index;
+                    } else {
+                        error!("Attempted to play song not in queue")
+                    }
                 }
                 QueueAction::Pause(track) => {
-                    self.is_playing = false;
-                    self.pos_index =
-                        Some(self.queue.iter().position(|t| track == t.local_id).unwrap());
+                    if let Some(pos_index) =
+                        Some(self.queue.iter().position(|t| track == t.local_id))
+                    {
+                        self.is_playing = false;
+                        self.pos_index = pos_index;
+                    } else {
+                        error!("Attempted to pause song not in queue")
+                    }
                 }
                 QueueAction::Move { id, dest_id } => {
-                    let from = self.queue.iter().position(|t| id == t.local_id).unwrap();
-                    let to = self
-                        .queue
-                        .iter()
-                        .position(|t| dest_id == t.local_id)
-                        .unwrap();
-
-                    if from > to {
-                        self.queue[to..=from].rotate_right(1);
+                    if let Some(from) = self.queue.iter().position(|t| id == t.local_id) {
+                        if let Some(to) = self.queue.iter().position(|t| dest_id == t.local_id) {
+                            if from > to {
+                                self.queue[to..=from].rotate_right(1);
+                            } else {
+                                self.queue[from..=to].rotate_left(1);
+                            }
+                        } else {
+                            error!("Move destination not in queue")
+                        }
                     } else {
-                        self.queue[from..=to].rotate_left(1);
+                        error!("Attempted to move song not in queue")
                     }
                 }
             }
