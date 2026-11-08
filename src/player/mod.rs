@@ -20,7 +20,7 @@ use tokio::{
 };
 use tracing::{debug, error};
 
-use crate::https::ApiClient;
+use crate::https::AuthedClient;
 
 mod demux;
 
@@ -40,11 +40,11 @@ pub struct Player {
     playback: RodioPlayer,
     _device: MixerDeviceSink,
     stream_task: Option<JoinHandle<()>>,
-    api: ApiClient,
+    api: AuthedClient,
 }
 
 impl Player {
-    pub async fn new(api: ApiClient) -> Result<(Self, PlayerHandle, Receiver<PlayerEvent>)> {
+    pub async fn new(api: AuthedClient) -> Result<(Self, PlayerHandle, Receiver<PlayerEvent>)> {
         let (command_tx, command_rx) = mpsc::channel::<PlayerCommand>(32);
         let device = rodio::DeviceSinkBuilder::open_default_sink()?;
         let playback = RodioPlayer::connect_new(device.mixer());
@@ -163,7 +163,7 @@ enum Chunk {
 async fn stream(
     track_id: String,
     rx: &mut Receiver<ChunkRequest>,
-    api: &mut ApiClient,
+    api: &mut AuthedClient,
 ) -> Result<()> {
     // Fetch manifest
     let manifest_bytes = api.fetch_manifest(&track_id).await?;
@@ -253,7 +253,7 @@ async fn chunk_fetch(
     url: String,
     key: [u8; 16],
     chunk_pos: usize,
-    api: ApiClient,
+    api: AuthedClient,
     chunk: Arc<Mutex<Chunk>>,
     pending: Option<oneshot::Sender<Bytes>>,
 ) -> Result<()> {

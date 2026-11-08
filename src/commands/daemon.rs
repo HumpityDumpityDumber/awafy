@@ -1,14 +1,17 @@
+use crate::https::ApiClient;
 use crate::models::Lounge;
 use crate::player::Player;
+use crate::player::PlayerEvent;
 use crate::socket::LoungeSocket;
-use crate::{https::ApiClient, player::PlayerEvent};
 use anyhow::{Context, Result};
 use rust_socketio::Payload;
 use serde_json::Value;
 use tracing::{debug, info};
 
 pub async fn main() -> Result<()> {
-    let mut api = ApiClient::new().context("Failed to build API client")?;
+    let mut api = ApiClient::new()?
+        .upgrade()
+        .context("Failed to build API client")?;
     api.refresh_session().await?;
 
     let mut lounge: Lounge = if let Some(lounge) = api.existing_lounge().await? {
@@ -51,7 +54,7 @@ pub async fn main() -> Result<()> {
                         if let Payload::Text(values) = payload {
                             let info = values.first().unwrap().clone();
                             let parsed: Value = serde_json::from_str(info.as_str().unwrap()).unwrap();
-                            info!("User joined: {}", serde_json::to_string_pretty(&parsed).unwrap());
+                            debug!("User joined: {}", serde_json::to_string_pretty(&parsed).unwrap());
                         }
                     }
                     "receive:message" => {
@@ -78,6 +81,8 @@ pub async fn main() -> Result<()> {
                                 }
                             }
                             if parsed["message"] == "FINISH" {
+                                info!("Finishing lounge...");
+                                api.finish_lounge(&lounge).await?;
                                 break
                             }
                         }
@@ -118,8 +123,7 @@ pub async fn main() -> Result<()> {
                 }
             }
             _ = tokio::signal::ctrl_c() => {
-                api.finish_lounge(&lounge).await?;
-                break;
+                break
             }
         }
     }

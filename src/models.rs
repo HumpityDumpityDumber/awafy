@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Code {
@@ -104,7 +104,7 @@ impl Lounge {
         self.is_playing = queue.is_playing;
         self.pos_index = queue.pos_index;
 
-        info!("queue updated: {:#?}", self);
+        debug!("queue updated: {:#?}", self);
     }
     pub fn update_queue_events(&mut self, events: QueueEvents) {
         self.cursor = events.cursor;
@@ -159,7 +159,7 @@ impl Lounge {
                 }
             }
         }
-        info!("queue updated: {:#?}", self);
+        debug!("queue updated: {:#?}", self);
     }
 }
 

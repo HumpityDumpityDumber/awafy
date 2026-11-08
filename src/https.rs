@@ -1,6 +1,7 @@
+use std::ops::Deref;
 use std::sync::Arc;
 
-use crate::auth;
+use crate::auth::{self, get_device_id};
 use crate::models::{
     Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session, Song, StreamingToken,
 };
@@ -18,21 +19,25 @@ const JSON_TYPE: &str = "application/json";
 const APK_VERSION: &str = "5.20.0";
 
 #[derive(Clone)]
-pub struct ApiClient {
-    pub client: Client,
+pub struct AuthedClient {
+    client: ApiClient,
     pub session: Arc<Mutex<Session>>,
     pub streaming_token: Option<StreamingToken>,
+}
+
+#[derive(Clone)]
+pub struct ApiClient {
+    pub client: Client,
 }
 
 impl ApiClient {
     pub fn new() -> Result<Self> {
         let mut headers = HeaderMap::new();
-        let session = auth::new_session().context("Failed to get credentials")?;
 
         headers.insert(CONTENT_TYPE, HeaderValue::from_static(JSON_TYPE));
         headers.insert(ACCEPT, HeaderValue::from_static(JSON_TYPE));
         headers.insert("X-Device-Id-Type", HeaderValue::from_static("3"));
-        headers.insert("X-Device-Id", HeaderValue::from_str(&session.device_id)?);
+        headers.insert("X-Device-Id", HeaderValue::from_str(&get_device_id()?)?);
         headers.insert("X-Platform", HeaderValue::from_str("AWAfy")?);
         headers.insert("X-App-Version", HeaderValue::from_str(APK_VERSION)?);
 
@@ -41,49 +46,11 @@ impl ApiClient {
             .build()
             .context("Failed to build reqwest client")?;
 
-        let streaming_token = None;
-
-        Ok(Self {
-            client,
-            session: Arc::new(Mutex::new(session)),
-            streaming_token,
-        })
+        Ok(Self { client })
     }
-
-    fn try_attach_auth(&self, req: RequestBuilder, session: Option<&Session>) -> RequestBuilder {
-        if let Some(session) = session {
-            req.header("X-Access-Token", session.access_token.as_str())
-        } else {
-            req
-        }
-    }
-
-    fn request(
-        &self,
-        use_base: bool,
-        method: Method,
-        path: &str,
-        session: Option<&Session>,
-    ) -> RequestBuilder {
-        let base = if use_base { BASE_URL } else { "" };
-        let url = format!("{base}{path}");
-        let req = self.client.request(method, url);
-        self.try_attach_auth(req, session)
-    }
-
-    pub async fn generic_get(&self, url: &str) -> Result<Response> {
-        let response = self
-            .request(false, Method::GET, url, None)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(response)
-    }
-
     pub async fn get_code(&self) -> Result<Code> {
         let code = self
-            .request(true, Method::POST, "/v4/code", None)
+            .request(true, Method::POST, "/v4/code")
             .send()
             .await?
             .error_for_status()?
@@ -92,11 +59,10 @@ impl ApiClient {
 
         Ok(code)
     }
-
     pub async fn poll_login(&self, code: &Code) -> Result<Value> {
         loop {
             let response = self
-                .request(true, Method::POST, "/v5/login/code", None)
+                .request(true, Method::POST, "/v5/login/code")
                 .json(code)
                 .send()
                 .await?;
@@ -112,6 +78,50 @@ impl ApiClient {
             return Ok(login_data);
         }
     }
+    pub async fn generic_get(&self, url: &str) -> Result<Response> {
+        let response = self
+            .request(false, Method::GET, url)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        Ok(response)
+    }
+    pub async fn fetch_segment(&self, url: &str) -> Result<Bytes> {
+        let response = self
+            .request(false, Method::GET, url)
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+
+        Ok(response)
+    }
+    fn request(&self, use_base: bool, method: Method, path: &str) -> RequestBuilder {
+        let base = if use_base { BASE_URL } else { "" };
+        let url = format!("{base}{path}");
+        self.client.request(method, url)
+    }
+    pub fn upgrade(self) -> Result<AuthedClient> {
+        let session = auth::new_session().context("Failed to get credentials")?;
+
+        Ok(AuthedClient {
+            client: self,
+            session: Arc::new(Mutex::new(session)),
+            streaming_token: None,
+        })
+    }
+}
+
+impl AuthedClient {
+    async fn request(&self, use_base: bool, method: Method, path: &str) -> RequestBuilder {
+        let token = self.session.lock().await.access_token.clone();
+
+        self.client
+            .request(use_base, method, path)
+            .header("X-Access-Token", token)
+    }
 
     pub async fn refresh_session(&mut self) -> Result<(), Error> {
         let (refresh_token, device_id, device_name) = {
@@ -124,7 +134,8 @@ impl ApiClient {
         };
 
         let login_data: Value = self
-            .request(true, Method::POST, "/v5/authorize", None)
+            .request(true, Method::POST, "/v5/authorize")
+            .await
             .json(&json!({ "refreshToken": refresh_token }))
             .send()
             .await?
@@ -139,15 +150,9 @@ impl ApiClient {
     }
 
     pub async fn existing_lounge(&self) -> Result<Option<Lounge>> {
-        let session = self.session.lock().await.clone();
-
         let response: Value = self
-            .request(
-                true,
-                Method::GET,
-                "/v6/me/rooms/recommends/sections",
-                Some(&session),
-            )
+            .request(true, Method::GET, "/v6/me/rooms/recommends/sections")
+            .await
             .send()
             .await?
             .error_for_status()?
@@ -186,7 +191,8 @@ impl ApiClient {
         });
 
         let lounge = self
-            .request(true, Method::POST, "/v6/room", Some(&session))
+            .request(true, Method::POST, "/v6/room")
+            .await
             .json(&payload)
             .send()
             .await?
@@ -198,14 +204,12 @@ impl ApiClient {
     }
 
     pub async fn finish_lounge(&self, lounge: &Lounge) -> Result<()> {
-        let session = &self.session.lock().await.clone();
-
         self.request(
             true,
             Method::POST,
             format!("/v6/room/{}/archive", lounge.id).as_str(),
-            Some(&session),
         )
+        .await
         .send()
         .await?
         .error_for_status()?;
@@ -213,22 +217,8 @@ impl ApiClient {
         Ok(())
     }
 
-    pub async fn fetch_segment(&self, url: &str) -> Result<Bytes> {
-        let response = self
-            .request(false, Method::GET, url, None)
-            .send()
-            .await?
-            .error_for_status()?
-            .bytes()
-            .await?;
-
-        Ok(response)
-    }
-
     pub async fn fetch_manifest(&mut self, track_id: &str) -> Result<Vec<u8>> {
         self.streaming_token = Some(self.get_streaming_token().await?);
-
-        let session = &self.session.lock().await.clone();
 
         let streaming_token = self.streaming_token.clone().unwrap(); // FIX: replace with an if let
 
@@ -240,8 +230,8 @@ impl ApiClient {
                     "/v4/tracks/{}/audio.m3u8?bitRate=320&audioType=0&accessToken={}",
                     track_id, streaming_token.token
                 ),
-                Some(session),
             )
+            .await
             .send()
             .await?
             .error_for_status()?
@@ -252,14 +242,14 @@ impl ApiClient {
     }
 
     pub async fn fetch_queue_events(&self, lounge: &Lounge) -> Result<QueueEvents> {
-        let session = &self.session.lock().await.clone();
         let url: String = format!(
             "/v6/room/{}/queue/events?since={}",
             lounge.id, lounge.cursor
         );
 
         let response: Value = self
-            .request(true, Method::GET, url.as_str(), Some(&session))
+            .request(true, Method::GET, url.as_str())
+            .await
             .send()
             .await?
             .error_for_status()?
@@ -310,9 +300,9 @@ impl ApiClient {
     }
 
     async fn get_streaming_token(&self) -> Result<StreamingToken> {
-        let session = &self.session.lock().await;
         let streaming_token = self
-            .request(true, Method::GET, "/v4/device/token", Some(&session))
+            .request(true, Method::GET, "/v4/device/token")
+            .await
             .send()
             .await?
             .error_for_status()?
@@ -323,14 +313,13 @@ impl ApiClient {
     }
 
     pub async fn fetch_queue(&self, lounge_id: &str) -> Result<Queue> {
-        let session = &self.session.lock().await;
         let response: Value = self
             .request(
                 true,
                 Method::GET,
                 format!("/v6/room/{}/queue", lounge_id).as_str(),
-                Some(&session),
             )
+            .await
             .send()
             .await?
             .error_for_status()?
@@ -376,5 +365,13 @@ impl ApiClient {
         };
 
         Ok(queue)
+    }
+}
+
+impl Deref for AuthedClient {
+    type Target = ApiClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.client
     }
 }
