@@ -169,10 +169,10 @@ impl AuthedClient {
                 value["rooms"].as_array().unwrap().first().unwrap()["room"].clone(),
             )?;
 
-            return Ok(Some(lounge));
+            Ok(Some(lounge))
         } else {
-            return Ok(None);
-        };
+            Ok(None)
+        }
     }
 
     pub async fn create_lounge(&self) -> Result<Lounge> {
@@ -344,15 +344,11 @@ impl AuthedClient {
                     .collect(),
                 cursor: response["next"].as_str().unwrap().to_string(),
                 last_id: response["id"].as_str().unwrap().to_string(),
-                is_playing: if response["playerState"]["isPlaying"].as_bool() == Some(true) {
-                    true
-                } else {
-                    false
-                },
+                is_playing: response["playerState"]["isPlaying"].as_bool() == Some(true),
                 pos_index: response["mediaQueue"]["mediaPlaylist"]
                     .get("currentMediaTrackIndex")
-                    .and_then(|i| i.as_u64())
-                    .map(|i| i as usize),
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize,
             }
         } else {
             Queue {
@@ -360,7 +356,7 @@ impl AuthedClient {
                 cursor: response["next"].as_str().unwrap().to_string(),
                 last_id: response["id"].as_str().unwrap().to_string(),
                 is_playing: false,
-                pos_index: None,
+                pos_index: 0,
             }
         };
 

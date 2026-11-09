@@ -276,7 +276,7 @@ impl PesReader {
 }
 
 pub async fn ts_demux(segment: Bytes) -> io::Result<Bytes> {
-    if segment.len() % PACKET_SIZE != 0 {
+    if !segment.len().is_multiple_of(PACKET_SIZE) {
         return Err(invalid("Incomplete MPEG-TS packet"));
     }
 
@@ -289,7 +289,7 @@ pub async fn ts_demux(segment: Bytes) -> io::Result<Bytes> {
 
     let mut output = Vec::new();
 
-    for packet in segment.chunks_exact(PACKET_SIZE) {
+    for packet in segment.as_chunks::<PACKET_SIZE>().0 {
         if packet[0] != 0x47 {
             return Err(invalid("Invalid MPEG-TS sync byte"));
         }
@@ -308,11 +308,11 @@ pub async fn ts_demux(segment: Bytes) -> io::Result<Bytes> {
 
         if pid == 0 {
             for section in pat_reader.process(payload, pusi)? {
-                if let Some(pid) = program_association_table(&section)? {
-                    if pmt_pid != Some(pid) {
-                        pmt_reader.reset();
-                        pmt_pid = Some(pid);
-                    }
+                if let Some(pid) = program_association_table(&section)?
+                    && pmt_pid != Some(pid)
+                {
+                    pmt_reader.reset();
+                    pmt_pid = Some(pid);
                 }
             }
         } else if Some(pid) == pmt_pid {

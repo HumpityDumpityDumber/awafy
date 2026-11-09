@@ -20,7 +20,8 @@ pub async fn main() -> Result<()> {
         api.create_lounge().await?
     };
 
-    info!("Lounge created: {}", serde_json::to_string_pretty(&lounge)?);
+    info!("Created lounge");
+    debug!("Lounge: {}", serde_json::to_string_pretty(&lounge)?);
 
     let mut socket =
         LoungeSocket::connect(&api.session.lock().await.clone(), lounge.id.clone()).await?;
@@ -54,7 +55,8 @@ pub async fn main() -> Result<()> {
                         if let Payload::Text(values) = payload {
                             let info = values.first().unwrap().clone();
                             let parsed: Value = serde_json::from_str(info.as_str().unwrap()).unwrap();
-                            debug!("User joined: {}", serde_json::to_string_pretty(&parsed).unwrap());
+                            info!("User joined");
+                            debug!("User: {}", serde_json::to_string_pretty(&parsed).unwrap());
                         }
                     }
                     "receive:message" => {
@@ -70,16 +72,14 @@ pub async fn main() -> Result<()> {
                             }
                             // To skip forward and back we pause the
                             // song before or after the current one
-                            if parsed["message"] == "SKIP_NEXT" {
-                                if let Some(song) = lounge.get_queue_song(1) {
+                            if parsed["message"] == "SKIP_NEXT"
+                                && let Some(song) = lounge.get_queue_song(1) {
                                     socket.pause(&song, &api.session.lock().await.clone().device_id).await?;
                                 }
-                            }
-                            if parsed["message"] == "SKIP_BACK" {
-                                if let Some(song) = lounge.get_queue_song(-1) {
+                            if parsed["message"] == "SKIP_BACK"
+                                && let Some(song) = lounge.get_queue_song(-1) {
                                     socket.pause(&song, &api.session.lock().await.clone().device_id).await?;
                                 }
-                            }
                             if parsed["message"] == "FINISH" {
                                 info!("Finishing lounge...");
                                 api.finish_lounge(&lounge).await?;
@@ -88,8 +88,8 @@ pub async fn main() -> Result<()> {
                         }
                     }
                     "message" => {
-                        if let Payload::Text(values) = payload {
-                            if let Some(msg) = values.first() {
+                        if let Payload::Text(values) = payload
+                            && let Some(msg) = values.first() {
                                 match msg.as_str() {
                                     Some("receive:queue:event:update") => {
                                         let previous_pos = lounge.pos_index;
@@ -97,13 +97,12 @@ pub async fn main() -> Result<()> {
                                         let events = api.fetch_queue_events(&lounge).await?;
                                         lounge.update_queue_events(events);
 
-                                        if lounge.pos_index != previous_pos {
-                                            if let Some(song) = lounge.get_queue_song(0) {
+                                        if lounge.pos_index != previous_pos
+                                            && let Some(song) = lounge.get_queue_song(0) {
                                                 player_handle.start(song.song.track_id).await?;
                                             }
-                                        }
 
-                                        if lounge.is_playing == true {
+                                        if lounge.is_playing {
                                             socket.pause(&lounge.get_queue_song(0).unwrap(), &api.session.lock().await.clone().device_id).await?;
                                         }
                                     }
@@ -115,7 +114,6 @@ pub async fn main() -> Result<()> {
                                     }
                                 }
                             }
-                        }
                     }
                     unrecognized => {
                         debug!("Unrecognized event: {} with payload: {:?}", unrecognized, &payload);

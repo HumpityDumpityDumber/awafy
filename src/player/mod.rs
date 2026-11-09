@@ -204,13 +204,13 @@ async fn stream(
         }
 
         // Prefetch next two chunks
-        for next in (chunk_pos + 1)..(chunk_pos + 3).min(cache.len()) {
+        for (next, chunk) in cache.iter().enumerate().skip(chunk_pos + 1).take(2) {
             tokio::spawn(chunk_fetch(
                 manifest.segments[next].uri.clone(),
                 key,
                 next,
                 api.clone(),
-                Arc::clone(&cache[next]),
+                Arc::clone(chunk),
                 None,
             ));
         }

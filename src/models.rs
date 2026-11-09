@@ -19,7 +19,7 @@ pub struct Session {
 
 impl Session {
     pub fn from_login_data(login_data: &Value, device_id: &str, device_name: &str) -> Self {
-        return Session {
+        Session {
             access_token: login_data["authData"]["refresh"]["accessToken"]
                 .as_str()
                 .expect("Failed to create session: missing access token")
@@ -33,7 +33,7 @@ impl Session {
                 .to_owned(),
             device_id: device_id.to_owned(),
             device_name: device_name.to_owned(),
-        };
+        }
     }
 }
 
@@ -75,14 +75,14 @@ pub struct Lounge {
     #[serde(skip)]
     queue: Vec<QueueSong>,
     #[serde(skip)]
-    pub pos_index: Option<usize>,
+    pub pos_index: usize,
     #[serde(skip)]
     pub last_id: String,
 }
 
 impl Lounge {
     pub fn get_queue_song(&self, offset: isize) -> Option<QueueSong> {
-        let current_pos = self.pos_index? as isize;
+        let current_pos = self.pos_index as isize;
         let target_index = current_pos.checked_add(offset)?;
 
         if target_index < 0 || target_index > self.queue.len() as isize {
@@ -126,9 +126,7 @@ impl Lounge {
                     }
                 }
                 QueueAction::Play(track) => {
-                    if let Some(pos_index) =
-                        Some(self.queue.iter().position(|t| track == t.local_id))
-                    {
+                    if let Some(pos_index) = self.queue.iter().position(|t| track == t.local_id) {
                         self.is_playing = true;
                         self.pos_index = pos_index;
                     } else {
@@ -136,9 +134,7 @@ impl Lounge {
                     }
                 }
                 QueueAction::Pause(track) => {
-                    if let Some(pos_index) =
-                        Some(self.queue.iter().position(|t| track == t.local_id))
-                    {
+                    if let Some(pos_index) = self.queue.iter().position(|t| track == t.local_id) {
                         self.is_playing = false;
                         self.pos_index = pos_index;
                     } else {
@@ -172,7 +168,7 @@ pub struct Queue {
     pub cursor: String,
     pub last_id: String,
     pub is_playing: bool,
-    pub pos_index: Option<usize>,
+    pub pos_index: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

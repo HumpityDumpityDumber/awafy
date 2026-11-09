@@ -38,8 +38,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Login {} => commands::login::login().await,
-        Commands::Daemon {} => commands::daemon::main().await,
-        Commands::Name {} => commands::name::main().await,
+        Commands::Login => commands::login::login().await,
+        Commands::Daemon => commands::daemon::main().await,
+        Commands::Name => commands::name::main().await,
     }
 }

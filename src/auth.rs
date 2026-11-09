@@ -43,7 +43,7 @@ pub fn new_session() -> Result<Session, Error> {
 
 pub fn get_device_name(device_id: &str) -> Result<String> {
     let seed_u64 =
-        u64::from_str_radix(&device_id, 16).context("Failed to parse device ID as hex")?;
+        u64::from_str_radix(device_id, 16).context("Failed to parse device ID as hex")?;
 
     let mut rng = SmallRng::seed_from_u64(seed_u64);
 
