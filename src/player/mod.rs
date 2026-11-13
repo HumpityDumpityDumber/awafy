@@ -119,8 +119,6 @@ impl Player {
                     self.playback.append(EmptyCallback::new(Box::new(move || {
                         let _ = event_tx.try_send(PlayerEvent::SongFinished);
                     })));
-
-                    self.playback.play();
                 }
             }
         }

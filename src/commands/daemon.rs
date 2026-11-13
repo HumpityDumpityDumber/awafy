@@ -36,6 +36,7 @@ pub async fn main() -> Result<()> {
 
     if let Some(song) = lounge.get_queue_song(0) {
         player_handle.start(song.song.track_id).await?;
+        player_handle.play().await?
     }
 
     loop {
@@ -92,15 +93,20 @@ pub async fn main() -> Result<()> {
                             && let Some(msg) = values.first() {
                                 match msg.as_str() {
                                     Some("receive:queue:event:update") => {
-                                        let previous_pos = lounge.pos_index;
+                                        let prev_op = lounge.get_queue_song(0);
 
                                         let events = api.fetch_queue_events(&lounge).await?;
                                         lounge.update_queue_events(events);
 
-                                        if lounge.pos_index != previous_pos
-                                            && let Some(song) = lounge.get_queue_song(0) {
-                                                player_handle.start(song.song.track_id).await?;
+                                        if let Some(current) = lounge.get_queue_song(0)
+                                            && prev_op.as_ref().is_none_or(|prev| prev.local_id != current.local_id)
+                                        {
+                                            player_handle.start(current.song.track_id).await?;
+
+                                            if prev_op.is_none() {
+                                                player_handle.play().await?
                                             }
+                                        }
 
                                         if lounge.is_playing {
                                             socket.pause(&lounge.get_queue_song(0).unwrap(), &api.session.lock().await.clone().device_id).await?;
