@@ -8,8 +8,11 @@ use rust_socketio::Payload;
 use serde_json::Value;
 use tracing::{debug, info};
 
-pub async fn main() -> Result<()> {
-    let mut api = ApiClient::new()?
+pub async fn main(abema: bool) -> Result<()> {
+    if abema {
+        info!("Using Abema Music API")
+    };
+    let mut api = ApiClient::new(abema)?
         .upgrade()
         .context("Failed to build API client")?;
     api.refresh_session().await?;

@@ -22,8 +22,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Login,
-    Daemon,
+    Login {
+        #[arg(short, long, default_value_t = false)]
+        abema: bool,
+    },
+    Daemon {
+        #[arg(short, long, default_value_t = false)]
+        abema: bool,
+    },
     Name,
 }
 
@@ -38,8 +44,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Login => commands::login::login().await,
-        Commands::Daemon => commands::daemon::main().await,
+        Commands::Login { abema } => commands::login::login(*abema).await,
+        Commands::Daemon { abema } => commands::daemon::main(*abema).await,
         Commands::Name => commands::name::main().await,
     }
 }

@@ -4,12 +4,14 @@ use crate::models::Session;
 use anyhow::{Error, Result};
 use tracing::{debug, info};
 
-pub async fn login() -> Result<(), Error> {
-    // TODO
+pub async fn login(abema: bool) -> Result<(), Error> {
+    if abema {
+        info!("Making requests to abema music api")
+    };
     let device_id = auth::get_device_id()?;
     let device_name = auth::get_device_name(&device_id)?;
     debug!("device id: {}\n device name: {}", &device_id, &device_name);
-    let api = ApiClient::new()?;
+    let api = ApiClient::new(abema)?;
 
     let code = api.get_code().await?;
     info!("CODE: {}", code.code);

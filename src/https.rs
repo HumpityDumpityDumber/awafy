@@ -14,7 +14,6 @@ use serde_json::{Value, json};
 use tokio::time::{Duration, sleep};
 use tracing::debug;
 
-const BASE_URL: &str = "https://api.awa.io";
 const JSON_TYPE: &str = "application/json";
 const APK_VERSION: &str = "5.20.0";
 
@@ -28,10 +27,17 @@ pub struct AuthedClient {
 #[derive(Clone)]
 pub struct ApiClient {
     pub client: Client,
+    base_url: String,
 }
 
 impl ApiClient {
-    pub fn new() -> Result<Self> {
+    pub fn new(abema: bool) -> Result<Self> {
+        let base_url: String = if abema {
+            "https://api-abema.awa.io"
+        } else {
+            "https://api.awa.io"
+        }
+        .to_string();
         let mut headers = HeaderMap::new();
 
         headers.insert(CONTENT_TYPE, HeaderValue::from_static(JSON_TYPE));
@@ -46,7 +52,7 @@ impl ApiClient {
             .build()
             .context("Failed to build reqwest client")?;
 
-        Ok(Self { client })
+        Ok(Self { base_url, client })
     }
     pub async fn get_code(&self) -> Result<Code> {
         let code = self
@@ -99,7 +105,7 @@ impl ApiClient {
         Ok(response)
     }
     fn request(&self, use_base: bool, method: Method, path: &str) -> RequestBuilder {
-        let base = if use_base { BASE_URL } else { "" };
+        let base = if use_base { &self.base_url } else { "" };
         let url = format!("{base}{path}");
         self.client.request(method, url)
     }
