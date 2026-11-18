@@ -2,14 +2,15 @@ use std::{
     io::{self, Read, Seek, SeekFrom},
     mem,
     sync::Arc,
+    time::Duration,
 };
 
 use aes::cipher::{KeyIvInit, block_padding::Pkcs7};
 use aes::{Aes128, cipher::BlockModeDecrypt};
 use anyhow::{Result, anyhow};
 use bytes::Bytes;
-use m3u8_rs::parse_media_playlist_res;
-use rodio::{MixerDeviceSink, Player as RodioPlayer, source::EmptyCallback};
+use m3u8_rs::{MediaPlaylist, parse_media_playlist_res};
+use rodio::{MixerDeviceSink, Player as RodioPlayer, Source, source::EmptyCallback};
 use tokio::{
     sync::{
         Mutex,
@@ -20,7 +21,7 @@ use tokio::{
 };
 use tracing::{debug, error};
 
-use crate::https::AuthedClient;
+use crate::https::{ApiClient, AuthedClient};
 
 mod demux;
 
@@ -28,6 +29,7 @@ pub enum PlayerCommand {
     Pause,
     Play,
     Start(String),
+    Seek(Duration),
 }
 
 pub enum PlayerEvent {
@@ -41,6 +43,8 @@ pub struct Player {
     _device: MixerDeviceSink,
     stream_task: Option<JoinHandle<()>>,
     api: AuthedClient,
+    manifest: Option<MediaPlaylist>,
+    stream_tx: Option<Sender<ChunkRequest>>,
 }
 
 impl Player {
@@ -59,6 +63,8 @@ impl Player {
                 _device: device,
                 stream_task: None,
                 api,
+                manifest: None,
+                stream_tx: None,
             },
             PlayerHandle { tx: command_tx },
             event_rx,
@@ -86,11 +92,34 @@ impl Player {
                     self.playback.stop();
 
                     let (stream_tx, mut stream_rx) = mpsc::channel::<ChunkRequest>(32);
+                    self.stream_tx = Some(stream_tx.clone());
+
                     let mut api = self.api.clone();
+
+                    // Fetch manifest
+                    let manifest_bytes = api.fetch_manifest(&track_id).await?;
+                    // Parse manifest
+                    let manifest = parse_media_playlist_res(&manifest_bytes).unwrap();
+                    self.manifest = Some(manifest.clone());
+                    // Get key
+                    let key_response = api
+                        .generic_get(&manifest.segments[0].key.clone().unwrap().uri.unwrap())
+                        .await?
+                        .bytes()
+                        .await?;
+                    let key: [u8; 16] = key_response.as_ref().try_into()?;
+                    // Cache will be a vec of chunkstate enums that are either empty
+                    // Pending (holds list of waiting recievers oneshot channels)
+                    // Ready (hold chunk bytes)
+                    let cache: Vec<Arc<Mutex<Chunk>>> = (0..manifest.segments.len())
+                        .map(|_| Arc::new(Mutex::new(Chunk::Empty)))
+                        .collect();
 
                     // Start stream function
                     self.stream_task = Some(tokio::spawn(async move {
-                        if let Err(err) = stream(track_id, &mut stream_rx, &mut api).await {
+                        if let Err(err) =
+                            stream(&mut stream_rx, &manifest, key.clone(), &cache).await
+                        {
                             error!("Streaming failed: {err:#}");
                         }
                     }));
@@ -102,14 +131,7 @@ impl Player {
                         offset: 0,
                     };
 
-                    let decoder = tokio::task::spawn_blocking(move || {
-                        rodio::Decoder::builder()
-                            .with_seekable(false)
-                            .with_data(reader)
-                            .with_hint("aac")
-                            .build()
-                    })
-                    .await??;
+                    let decoder = AudioSource::new();
 
                     // Attach new audio and start rodio playback
                     self.playback.append(decoder);
@@ -119,6 +141,10 @@ impl Player {
                     self.playback.append(EmptyCallback::new(Box::new(move || {
                         let _ = event_tx.try_send(PlayerEvent::SongFinished);
                     })));
+                }
+
+                PlayerCommand::Seek(pos) => {
+                    todo!()
                 }
             }
         }
@@ -159,27 +185,12 @@ enum Chunk {
 }
 
 async fn stream(
-    track_id: String,
     rx: &mut Receiver<ChunkRequest>,
-    api: &mut AuthedClient,
+    manifest: &MediaPlaylist,
+    key: [u8; 16],
+    cache: &Vec<Arc<Mutex<Chunk>>>,
 ) -> Result<()> {
-    // Fetch manifest
-    let manifest_bytes = api.fetch_manifest(&track_id).await?;
-    // parse manifest
-    let manifest = parse_media_playlist_res(&manifest_bytes).unwrap();
-    // Get key
-    let key_response = api
-        .generic_get(&manifest.segments[0].key.clone().unwrap().uri.unwrap())
-        .await?
-        .bytes()
-        .await?;
-    let key: [u8; 16] = key_response.as_ref().try_into()?;
-    // Cache will be a vec of chunkstate enums that are either empty
-    // Pending (holds list of waiting recievers oneshot channels)
-    // Ready (hold chunk bytes)
-    let cache: Vec<Arc<Mutex<Chunk>>> = (0..manifest.segments.len())
-        .map(|_| Arc::new(Mutex::new(Chunk::Empty)))
-        .collect();
+    let api = ApiClient::new()?;
 
     // DEBUG PREFETCH WHOLE SONG
     // for i in 0..manifest.segments.len() {
@@ -251,7 +262,7 @@ async fn chunk_fetch(
     url: String,
     key: [u8; 16],
     chunk_pos: usize,
-    api: AuthedClient,
+    api: ApiClient,
     chunk: Arc<Mutex<Chunk>>,
     pending: Option<oneshot::Sender<Bytes>>,
 ) -> Result<()> {
@@ -361,11 +372,72 @@ impl Read for AudioReader {
     }
 }
 
-impl Seek for AudioReader {
-    fn seek(&mut self, _: SeekFrom) -> io::Result<u64> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "Stream is not seekable",
-        ))
+// impl Seek for AudioReader {
+//     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+//         if self.chunk.is_none() {
+//             self.fetch_chunk(self.chunk_num).map_err(io::Error::other)?;
+//         }
+
+//         let chunk_len = self.chunk.as_ref().unwrap().len() as i64;
+
+//         // Calculate the target offset
+//         let target_offset: i64 = match pos {
+//             SeekFrom::Start(n) => n as i64,
+//             SeekFrom::Current(n) => (self.offset as i64) + n,
+//             SeekFrom::End(n) => chunk_len + n,
+//         };
+
+//         // Ensure the target is within bounds
+//         if target_offset < 0 || target_offset > chunk_len {
+//             return Err(io::Error::new(
+//                 io::ErrorKind::InvalidInput,
+//                 format!(
+//                     "Seek target {} is out of bounds for current chunk (len: {})",
+//                     target_offset, chunk_len
+//                 ),
+//             ));
+//         }
+
+//         self.offset = target_offset as usize;
+
+//         Ok(self.offset as u64)
+//     }
+// }
+
+pub struct AudioSource {
+    streamer: Sender<ChunkRequest>,
+    manifest: MediaPlaylist,
+    chunk_start: Duration,
+}
+
+impl AudioSource {
+    pub fn new() {
+        todo!()
+    }
+}
+
+impl Source for AudioSource {
+    fn channels(&self) -> u16 {
+        self.decoder.channels()
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.decoder.sample_rate()
+    }
+
+    fn current_span_len(&self) -> Option<usize> {
+        self.decoder.current_span_len()
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        todo!()
+    }
+}
+
+impl Iterator for AudioSource {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.decoder.next()
     }
 }

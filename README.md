@@ -43,9 +43,9 @@ Current state:
 - [x] Parsing of song manifest | 10/25
 - [x] Requesting and decoding of music chunks | 10/30
 - [x] Finished audio playback | 11/6
-- [ ] Reaction based volume controls | 11/16
-- [ ] Refactor caching to not be in streamer function,
-prefetching of multiple songs for quick skipping and song changes.
+- [ ] Seeking (Requires custom rodio source type) | 11/16
+- [ ] Reaction based volume controls | 11/24
+- [ ] Refactor caching to be outside player for precaching of future songs
 - [ ] Error handling overhaul to make more robust
 - [ ] UI interface for control (chrome extension or microui, widget etc)
 - [ ] Testing on the raspberry pi
