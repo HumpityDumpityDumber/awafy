@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use crate::auth::{self, get_device_id};
 use crate::models::{
-    Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session, Song, StreamingToken,
+    Album, Artist, Code, Lounge, Queue, QueueAction, QueueEvents, QueueSong, Session, Song,
+    StreamingToken,
 };
 use anyhow::{Context, Error, Result};
 use bytes::Bytes;
@@ -181,6 +182,47 @@ impl AuthedClient {
         }
     }
 
+    pub async fn fetch_metadata(&self, tracks: Vec<String>) -> Result<Vec<Song>> {
+        let response: Value = self
+            .request(
+                true,
+                Method::GET,
+                &format!("/v5/tracks/{}", tracks.join(",")),
+            )
+            .await
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        let metadata = &response["dataSet"];
+        let tracks = metadata["tracks"].as_array().unwrap();
+        let albums = metadata["albums"].as_array().unwrap();
+        let artists = metadata["artists"].as_array().unwrap();
+
+        let songs = response["list"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(i, _)| Song {
+                name: tracks[i]["name"].as_str().unwrap().to_string(),
+                track_id: tracks[i]["id"].as_str().unwrap().to_string(),
+                artist: Artist {
+                    name: artists[i]["name"].as_str().unwrap().to_string(),
+                    id: artists[i]["id"].as_str().unwrap().to_string(),
+                },
+                album: Album {
+                    name: albums[i]["name"].as_str().unwrap().to_string(),
+                    id: albums[i]["id"].as_str().unwrap().to_string(),
+                },
+            })
+            .collect();
+
+        Ok(songs)
+    }
+
     pub async fn create_lounge(&self) -> Result<Lounge> {
         let session = &self.session.lock().await.clone();
 
@@ -262,40 +304,53 @@ impl AuthedClient {
             .json()
             .await?;
 
-        let events = QueueEvents {
-            events: response["events"]
-                .as_array()
-                .cloned()
-                .unwrap_or(vec![])
-                .iter()
-                .map(|s| match s["action"].as_u64().unwrap_or(0) {
-                    1 => QueueAction::Reset,
-                    2 => QueueAction::Add(
-                        s["targetContents"][0]["mediaTracks"]
-                            .as_array()
-                            .unwrap()
+        let mut events = Vec::new();
+
+        for s in response["events"].as_array().cloned().unwrap_or_default() {
+            let event = match s["action"].as_u64().unwrap_or(0) {
+                1 => QueueAction::Reset,
+                2 => {
+                    let song_info = s["targetContents"][0]["mediaTracks"].as_array().unwrap();
+
+                    let song_ids: Vec<(String, String)> = song_info
+                        .iter()
+                        .map(|t| {
+                            (
+                                t["trackId"].as_str().unwrap().to_string(),
+                                t["mediaTrackId"].as_str().unwrap().to_string(),
+                            )
+                        })
+                        .collect();
+
+                    let songs = self
+                        .fetch_metadata(song_ids.iter().map(|t| t.0.clone()).collect())
+                        .await?;
+
+                    QueueAction::Add(
+                        song_ids
                             .iter()
-                            .map(|t| QueueSong {
-                                song: Song {
-                                    album: None,
-                                    album_art: None,
-                                    name: None,
-                                    track_id: t["trackId"].as_str().unwrap().to_string(),
-                                },
-                                local_id: t["mediaTrackId"].as_str().unwrap().to_string(),
+                            .map(|(t_id, m_id)| QueueSong {
+                                song: songs.iter().find(|t| t_id == &t.track_id).unwrap().clone(),
+                                local_id: m_id.clone(),
                             })
                             .collect(),
-                    ),
-                    3 => QueueAction::Remove(s["mediaTrackId"].as_str().unwrap().to_string()),
-                    4 => QueueAction::Play(s["mediaTrackId"].as_str().unwrap().to_string()),
-                    5 => QueueAction::Pause(s["mediaTrackId"].as_str().unwrap().to_string()),
-                    7 => QueueAction::Move {
-                        id: s["mediaTrackId"].as_str().unwrap().to_string(),
-                        dest_id: s["destinationMediaTrackId"].as_str().unwrap().to_string(),
-                    },
-                    _ => QueueAction::Unknown,
-                })
-                .collect(),
+                    )
+                }
+                3 => QueueAction::Remove(s["mediaTrackId"].as_str().unwrap().to_string()),
+                4 => QueueAction::Play(s["mediaTrackId"].as_str().unwrap().to_string()),
+                5 => QueueAction::Pause(s["mediaTrackId"].as_str().unwrap().to_string()),
+                7 => QueueAction::Move {
+                    id: s["mediaTrackId"].as_str().unwrap().to_string(),
+                    dest_id: s["destinationMediaTrackId"].as_str().unwrap().to_string(),
+                },
+                _ => QueueAction::Unknown,
+            };
+
+            events.push(event);
+        }
+
+        let events = QueueEvents {
+            events,
             cursor: response["next"].as_str().unwrap().to_string(),
             last_id: response["id"].as_str().unwrap().to_string(),
         };
@@ -335,16 +390,24 @@ impl AuthedClient {
         let queue: Queue = if let Some(tracks) =
             response["mediaQueue"]["mediaPlaylist"]["mediaTracks"].as_array()
         {
+            let songs = self
+                .fetch_metadata(
+                    tracks
+                        .iter()
+                        .map(|t| t["trackId"].clone().as_str().unwrap().to_string())
+                        .collect(),
+                )
+                .await?;
+
             Queue {
                 tracks: tracks
                     .iter()
                     .map(|song| QueueSong {
-                        song: Song {
-                            album: None,
-                            album_art: None,
-                            name: None,
-                            track_id: song["trackId"].as_str().unwrap().to_string(),
-                        },
+                        song: songs
+                            .iter()
+                            .find(|t| song["trackId"].as_str().unwrap() == t.track_id)
+                            .unwrap()
+                            .clone(),
                         local_id: song["mediaTrackId"].as_str().unwrap().to_string(),
                     })
                     .collect(),
