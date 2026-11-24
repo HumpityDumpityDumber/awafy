@@ -43,6 +43,7 @@ Current state:
 - [x] Parsing of song manifest | 10/25
 - [x] Requesting and decoding of music chunks | 10/30
 - [x] Finished audio playback | 11/6
+- [x] Hydrate metadata
 - [ ] Reaction based volume controls | 11/16
 - [ ] Refactor caching to not be in streamer function,
 prefetching of multiple songs for quick skipping and song changes.
